@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import { RuleTester } from 'eslint';
 import tseslint from 'typescript-eslint';
-import breaks from '../src/rules/breaks.js';
+import { breaks } from '../src/index.js';
 
 // Wire RuleTester into node:test.
 RuleTester.describe = (name, fn) => test(name, fn);

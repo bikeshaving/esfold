@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { createRequire } from 'node:module';
 import { Linter } from 'eslint';
 import stylistic from '@stylistic/eslint-plugin';
 import fold from '../src/index.js';
@@ -14,7 +15,12 @@ import fold from '../src/index.js';
  * pass, it needs to settle.
  */
 
-const CORPUS_ROOT = join(import.meta.dirname, '..', 'node_modules', 'eslint', 'lib', 'rules');
+// Resolved via Node rather than by walking up from this file; see
+// corpus.test.js for why.
+const CORPUS_ROOT = join(
+  dirname(createRequire(import.meta.url).resolve('eslint')),
+  'rules',
+);
 const MAX_FILES = 15;
 
 const configFor = (indentOptions) => [

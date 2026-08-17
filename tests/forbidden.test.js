@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as espree from 'espree';
 import { makeSourceCode, parse, stripLocations } from './helpers.js';
-import { isForbiddenBreak } from '../src/_forbidden.js';
+import { isForbiddenBreak } from '../src/index.js';
 
 // §3.2. A false negative here is a correctness bug: the formatter would
 // silently change what the code does. Candidate construction avoids most of

@@ -1,10 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { createRequire } from 'node:module';
 import * as espree from 'espree';
 import { SourceCode } from 'eslint';
-import { format, applyEdits } from '../src/_format.js';
+import { format, applyEdits } from '../src/index.js';
 import { stripLocations } from './helpers.js';
 
 /**
@@ -18,7 +19,11 @@ import { stripLocations } from './helpers.js';
  *      rule architecture legal (§2.2).
  */
 
-const CORPUS_ROOT = join(import.meta.dirname, '..', 'node_modules', 'eslint', 'lib');
+// ESLint's own source, resolved by asking Node where the package is
+// rather than guessing at node_modules' position. Its entry point lives
+// inside lib/, so this is the corpus directory exactly — and it stays
+// correct under bundling, a different cwd, or a hoisted install.
+const CORPUS_ROOT = dirname(createRequire(import.meta.url).resolve('eslint'));
 const MAX_FILES = 120;
 
 function collectFiles(dir, out = []) {

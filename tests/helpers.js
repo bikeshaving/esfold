@@ -1,6 +1,6 @@
 import { SourceCode } from 'eslint';
 import * as espree from 'espree';
-import { format, applyEdits } from '../src/_format.js';
+import { format, applyEdits } from '../src/index.js';
 
 const PARSE_OPTIONS = {
   ecmaVersion: 'latest',

@@ -164,6 +164,13 @@ format(sourceCode, options) → Edit[]     // Edit = { range, text }
 No ESLint imports beyond types. The rule is `Program:exit` → call `format` → emit
 each `Edit` as a fix. Sixty lines at most.
 
+This is a seam, not a file boundary. The whole plugin is one file,
+`src/index.js`: measurement, the break grammar, the algorithm, and the ESLint
+adapter, in that order. It was six modules for a while, but nothing imported
+them except each other and the tests, they mean nothing apart, and the build
+bundles them back into one file regardless — the split was costing a
+`_`-prefix convention and buying nothing.
+
 This keeps the interesting logic testable without spinning up a linter, and lets
 the test harness in §8 run over a corpus directly. It is not a hedge toward
 shipping a CLI later — it's so the break-priority code can be tested as the pure

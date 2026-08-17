@@ -1,13 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { createRequire } from 'node:module';
 import { SourceCode } from 'eslint';
 import * as espree from 'espree';
-import { format, applyEdits } from '../src/_format.js';
-import { collectGroups } from '../src/_groups.js';
-import { isForbiddenBreak } from '../src/_forbidden.js';
-import { measureLine } from '../src/_measure.js';
+import { format, applyEdits } from '../src/index.js';
+import { collectGroups } from '../src/index.js';
+import { isForbiddenBreak } from '../src/index.js';
+import { measureLine } from '../src/index.js';
 
 /**
  * §8 test 4, width compliance. Every output line is within `maxWidth` unless
@@ -128,7 +129,7 @@ test('a line pushed over by a trailing token outside every group is broken', () 
 });
 
 test('width compliance over a corpus', () => {
-  const root = join(import.meta.dirname, '..', 'node_modules', 'eslint', 'lib');
+  const root = dirname(createRequire(import.meta.url).resolve('eslint'));
   const files = [];
   const walk = (dir) => {
     for (const name of readdirSync(dir).sort()) {

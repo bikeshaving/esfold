@@ -21,7 +21,7 @@ import { join } from 'node:path';
 import { SourceCode } from 'eslint';
 import tseslint from 'typescript-eslint';
 import prettier from 'prettier';
-import { format, applyEdits } from '../src/_format.js';
+import { format, applyEdits } from '../src/index.js';
 import {
   CORPUS, PARSE_OPTIONS, requireCorpus, sample, sourceFiles,
 } from './corpus.js';
