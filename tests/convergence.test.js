@@ -26,7 +26,10 @@ const configFor = (indentOptions) => [
     // them, which is noise unrelated to what this test measures.
     linterOptions: { reportUnusedDisableDirectives: 'off' },
     rules: {
-      'fold/breaks': ['error', { maxWidth: 80 }],
+      // 60, not 80. This corpus is tab-indented and already fits 80, so at
+      // 80 Fold makes no edits at all and this test would verify only that
+      // @stylistic converges with itself — which is not what it is for.
+      'fold/breaks': ['error', { maxWidth: 60 }],
       '@stylistic/semi': 'error',
       '@stylistic/quotes': ['error', 'single', { avoidEscape: true }],
       '@stylistic/indent': ['error', ...indentOptions],
@@ -96,11 +99,15 @@ for (const [name, config] of Object.entries(CONFIGS)) {
     const linter = new Linter();
     let exercised = 0;
     let changed = 0;
+    let foldEdits = 0;
     for (const file of files) {
       const code = readFileSync(file, 'utf8');
       // A real path under node_modules would hit flat config's default
       // ignores and silently lint nothing — use a synthetic filename.
       const filename = `corpus-${files.indexOf(file)}.js`;
+      foldEdits += linter
+        .verify(code, config, { filename })
+        .filter((m) => m.ruleId === 'fold/breaks').length;
       const first = linter.verifyAndFix(code, config, { filename });
       const fatal = first.messages.find((m) => m.fatal);
       if (fatal) continue; // unparseable under this config — not our concern
@@ -117,5 +124,11 @@ for (const [name, config] of Object.entries(CONFIGS)) {
     }
     assert.ok(exercised >= 10, `only ${exercised} files exercised`);
     assert.ok(changed > 0, 'the fix loop never changed anything');
+    // Fold specifically must be doing work, not just @stylistic.
+    assert.ok(
+      foldEdits > 50,
+      `fold contributed only ${foldEdits} reports — this corpus no longer ` +
+        'exercises the rule, so convergence is not being tested',
+    );
   });
 }
