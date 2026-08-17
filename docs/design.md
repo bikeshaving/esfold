@@ -265,16 +265,48 @@ All of these are implemented except #14, which was cut — see below.
 | 12 | JSX attributes and children | attributes as object properties |
 | 13 | Variable declarator lists | after the comma |
 | 14 | ~~Template literal `${}` interiors~~ | **cut** — see below |
+| 16b | Object property / type annotation `:` | after the `:` — last resort (§4.9) |
 | 15 | Arrow function bodies | after the `=>` (§4.6) |
 | 16 | Assignment values | after the operator — last resort (§4.9) |
 | 17–22 | TypeScript type syntax | as their value counterparts (§3.5) |
 | 23 | JSX children | one per line; nesting is necessary (§3.1, §3.6) |
 
-**#14 was cut, not deferred.** Splitting a method chain across an
-interpolation reads worse than the long line, and such lines are usually long
-because of the template's *text*, which no break can shorten. Nothing inside a
-template literal is folded now, including ordinary groups that happen to sit
-inside a `${}`.
+**#14 was cut, not deferred** — and the cut was re-examined with data before
+being kept. The original stated reason was that such lines are long because of
+the template's *text*, which no break can shorten. That reason is simply
+false: at width 80, 92 of 163 over-width template lines are long because of
+their *expressions*, and a break inside `${}` would fit them. The decision
+survives anyway, on better grounds. Prettier declines these too — it leaves
+`\`Unexpected text ${span.slice(index, match.index).trim()}\`` on a 61-column
+line rather than split a value across an interpolation — and an implementation
+restricted to bracketed lists still produced output worse than the long line
+it replaced. Nothing inside a template literal is folded, including ordinary
+groups that happen to sit inside a `${}`.
+
+The lesson is about measurement, not templates: the count answered "how many
+lines *could* a break fix," which is not the same question as "how many lines
+*should* be broken." Checking the reference formatter answered the second.
+
+**#16b was added** for symmetry: an object property binds a name to a value
+exactly as an assignment does, so having a last-resort break for `=` and not
+for `:` was arbitrary rather than principled. It reuses the fallback tier
+unchanged.
+
+Both fallbacks now decline an **unbreakable leaf** — a value that is entirely
+a string, template, or number. Moving one onto its own line is the fallback
+break that cannot pay for itself: the value is the same length wherever it
+goes, so the result either still overflows or is a line longer for nothing.
+This is the one place the differential paid for itself twice over. It first
+showed Fold breaking three lines Prettier leaves alone, which produced the
+rule above; and it then exposed a real bug behind a fourth. `colonGroup`
+found its colon with a filtered backwards token search, which is *unbounded* —
+so for a shorthand method (`test({ x }) {}`), which has no colon at all, it
+returned the colon of the property above and broke that line on behalf of an
+unrelated node. The value-side guard did not catch it, because the stray colon
+genuinely does precede the value; the fix bounds the search by the node's own
+key. A break attributed to the wrong node is a class of bug the width test
+cannot see, since the line it damages is one the group has no business
+touching.
 
 **#15 was added.** It is absent from the original table because that table was
 derived from the grammar, and this position only became obviously necessary

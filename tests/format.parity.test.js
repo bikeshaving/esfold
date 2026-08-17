@@ -124,3 +124,50 @@ test('and not when the value would not fit anyway', () => {
   const code = `const s = '${'x'.repeat(200)}';\n`;
   assert.equal(formatText(code, { maxWidth: 80 }), code);
 });
+
+test('a `:` gets the same last-resort break as an `=`', () => {
+  // An object property binds a name to a value exactly as an assignment
+  // does; treating one and not the other was arbitrary.
+  assert.equal(
+    formatText(
+      'const o = { someKeyName: someObject.deeply.nested.property.valueHere };\n',
+      { maxWidth: 50 },
+    ),
+    'const o = {\n' +
+      '  someKeyName:\n' +
+      '    someObject.deeply.nested.property.valueHere\n' +
+      '};\n',
+  );
+});
+
+test('nothing inside a template literal is folded, ever', () => {
+  // Reopened once, on the observation that most long template lines are long
+  // because of their expressions rather than their text. True, and not
+  // decisive: Prettier declines these too, and splitting a value across an
+  // interpolation reads worse than the long line.
+  assert.equal(
+    formatText(
+      'report(`Unexpected text ${span.slice(index, match.index).trim()}`, spans);\n',
+      { maxWidth: 60 },
+    ),
+    'report(\n' +
+      '  `Unexpected text ${span.slice(index, match.index).trim()}`,\n' +
+      '  spans\n' +
+      ');\n',
+  );
+});
+
+test('a shorthand method does not borrow the previous property\'s colon', () => {
+  // `test(...) {}` has no colon of its own. An unbounded backwards search
+  // finds the one belonging to `html:` and breaks that line on behalf of a
+  // node two lines below it.
+  const code =
+    'export default test({\n' +
+    '  html: "<div>content 0 3 3</div><div>content 1 2 2</div><div>content 2</div>",\n' +
+    '\n' +
+    '  test({ assert, target }) {\n' +
+    '    assert.equal(target, null);\n' +
+    '  },\n' +
+    '});\n';
+  assert.equal(formatText(code, { maxWidth: 80 }), code);
+});

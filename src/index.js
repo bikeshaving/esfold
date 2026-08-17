@@ -1031,9 +1031,53 @@ const ASSIGN_OPS = new Set([
  * This exists for the case where nothing inside the value can be split: a
  * member path, a template, a cast. Those lines were simply left long.
  */
+/**
+ * #16, second half: the break after a `:`, for an object property or a type
+ * annotation. The same construct as an assignment — a name bound to a
+ * value — so it gets the same last-resort treatment. Without it the two
+ * were arbitrarily different.
+ */
+/**
+ * A value with no interior structure to break: a string, a template, a
+ * number. Moving one of these onto its own line is the one fallback break
+ * that reliably fails to pay for itself — the value is exactly as long
+ * wherever it goes, so the line either still overflows or is one line
+ * longer for nothing. Prettier declines these too, tolerating the long
+ * line, and matching it removed three of Fold's four disagreements with it.
+ */
+function isUnbreakableLeaf(node) {
+  return (
+    node.type === 'Literal' ||
+    node.type === 'TemplateLiteral' ||
+    node.type === 'JSXText'
+  );
+}
+
+function colonGroup(sourceCode, node, value) {
+  if (!value || isUnbreakableLeaf(value)) return null;
+  const colon = sourceCode.getTokenBefore(value, {
+    filter: (t) => isPunct(t, ':'),
+  });
+  // The colon must lie between *this* node's key and its value. A filtered
+  // backwards search is unbounded, so for a construct that has no colon at
+  // all — a shorthand method, `test({ x }) {}` — it happily returns the
+  // colon of the property *above*, and the break lands on an unrelated
+  // line. The value-side check alone does not catch this: that stray colon
+  // genuinely does precede the value.
+  const keyEnd = node.key ? node.key.range[1] : node.range[0];
+  if (!colon || colon.range[0] < keyEnd || colon.range[1] > value.range[0])
+    return null;
+  return {
+    node,
+    kind: 'assign',
+    fallback: true,
+    gaps: [gapAfter(sourceCode, colon, ' ')],
+  };
+}
+
 function assignmentGroup(sourceCode, node) {
   const right = node.right ?? node.init;
-  if (!right) return null;
+  if (!right || isUnbreakableLeaf(right)) return null;
   const operator = sourceCode.getTokenBefore(right, {
     filter: (t) => t.type === 'Punctuator' && ASSIGN_OPS.has(t.value),
   });
@@ -1320,6 +1364,22 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
         if (assign) candidates.push(assign);
         break;
       }
+      case 'Property': {
+        if (!node.shorthand) {
+          const group = colonGroup(sourceCode, node, node.value);
+          if (group) candidates.push(group);
+        }
+        break;
+      }
+      case 'TSPropertySignature': {
+        const group = colonGroup(
+          sourceCode,
+          node,
+          node.typeAnnotation?.typeAnnotation,
+        );
+        if (group) candidates.push(group);
+        break;
+      }
 
       // The TypeScript type layer.
       case 'TSTypeParameterInstantiation':
@@ -1438,11 +1498,16 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
   });
   for (const group of candidates) {
     const [start, end] = group.range ?? group.node.range;
-    if (
-      templateRanges.some((range) => range[0] < start && end <= range[1])
-    ) {
-      group.addable = false;
-    }
+    if (!templateRanges.some((range) => range[0] < start && end <= range[1]))
+      continue;
+    // §3.3 #14 stays cut. Reopened once on the observation that most long
+    // template lines are long because of their *expressions* rather than
+    // their text — which is true, and turns out not to matter: Prettier
+    // declines these too, leaving the line long rather than splitting a
+    // value across an interpolation. Matching it is the right call, and the
+    // measurement that suggested otherwise counted lines that *could* be
+    // broken, not lines any formatter would want broken.
+    group.addable = false;
   }
 
   return { candidates, necessary, statementStarts };
