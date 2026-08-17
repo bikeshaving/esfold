@@ -191,6 +191,21 @@ function callGroup(sourceCode, node) {
   // group absorbs the break instead. The call group stays available to the
   // removal pass (an author-broken un-hugged form still collapses), with the
   // hug target's interior exempted from the inlining requirement.
+  // A call whose last argument is a function keeps whatever layout the
+  // author gave it. The hugged form leaves the open paren unbroken and the
+  // close paren on its own line —
+  //
+  //   promise.then(() =>
+  //     compute(value),
+  //   );
+  //
+  // which reads as "partially broken" to the consistency pass, though it is
+  // a deliberate and very common shape rather than an untidy list.
+  const last = args[args.length - 1];
+  const trailingFunction =
+    last.type === 'FunctionExpression' ||
+    last.type === 'ArrowFunctionExpression';
+
   const huggable = args.filter(isHuggable);
   if (
     huggable.length === 1 &&
@@ -198,7 +213,7 @@ function callGroup(sourceCode, node) {
   ) {
     return { node, gaps, addable: false, hug: huggable[0].range };
   }
-  return { node, gaps };
+  return { node, gaps, complete: !trailingFunction };
 }
 
 function bracketGroup(sourceCode, node, items, openValue, closeValue) {
@@ -227,7 +242,17 @@ function bracketGroup(sourceCode, node, items, openValue, closeValue) {
 function statementListGaps(sourceCode, statements) {
   const gaps = [];
   for (let i = 1; i < statements.length; i++) {
-    gaps.push(gapBefore(sourceCode, sourceCode.getFirstToken(statements[i]), 'same'));
+    const first = sourceCode.getFirstToken(statements[i]);
+    // A leading `;` guards ASI in semicolon-less code — `;(node).x = 1` —
+    // and belongs to the line of the statement it guards, even though the
+    // parser attaches it to the previous one. Breaking at this boundary
+    // would strand it on a line of its own and destroy the idiom.
+    const prev = sourceCode.getTokenBefore(first);
+    if (prev && isPunct(prev, ';')) {
+      const beforeSemi = sourceCode.getTokenBefore(prev);
+      if (!beforeSemi || beforeSemi.loc.end.line < prev.loc.start.line) continue;
+    }
+    gaps.push(gapBefore(sourceCode, first, 'same'));
   }
   return gaps;
 }
@@ -404,9 +429,9 @@ function paramsGroup(sourceCode, node) {
     huggable.length === 1 &&
     (huggable[0] === params[0] || huggable[0] === params[params.length - 1])
   ) {
-    return { node, gaps, range, addable: false, hug: huggable[0].range };
+    return { node, gaps, range, kind: 'params', addable: false, hug: huggable[0].range };
   }
-  return { node, gaps, range };
+  return { node, gaps, range, kind: 'params' };
 }
 
 /** #7: inside the parens of if / while / do-while / switch. */
@@ -450,7 +475,11 @@ function forGroup(sourceCode, node) {
 /** #9: import/export specifier lists, as object literal. */
 function specifierGroup(sourceCode, node, kinds) {
   const named = (node.specifiers ?? []).filter((s) => kinds.includes(s.type));
-  if (named.length === 0) return null;
+  // A lone specifier stays inline however long the line: what makes these
+  // lines long is the module path, and no break inside the braces shortens
+  // that. Two or more break normally. (Prettier draws the line in the same
+  // place, so import blocks come out identical.)
+  if (named.length < 2) return null;
   const open = sourceCode.getTokenBefore(sourceCode.getFirstToken(named[0]), {
     filter: (t) => isPunct(t, '{'),
   });
@@ -751,6 +780,20 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
       }
     }
   });
+  // A hugged argument's signature is part of the call's head: the break is
+  // absorbed by its body, so its parameter list must not become the next
+  // candidate. Without this, `it("...", function (done) {` breaks as
+  // `function (\n  done\n) {` — the call level is off the table, so the
+  // params are all that is left.
+  const hugged = new Set(
+    candidates.filter((g) => g.hug).map((g) => g.hug.join(':')),
+  );
+  for (const group of candidates) {
+    if (group.kind === 'params' && hugged.has(group.node.range.join(':'))) {
+      group.addable = false;
+    }
+  }
+
   // Never fold inside a template literal (§3.3 #14 was to be a last
   // resort; in practice the results — a method chain split across an
   // interpolation — read worse than a long line, and the line is usually

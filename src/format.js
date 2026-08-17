@@ -243,6 +243,7 @@ export function format(sourceCode, options = {}) {
     // and completing it would pull the head apart. §4.3's all-or-nothing is
     // about element lists, where a half-broken list is just untidy.
     if (group.kind === 'chain') return;
+    if (group.complete === false) return;
     const gaps = group.gaps;
     const broken = gaps.filter(hasBreak);
     if (broken.length === 0) return; // untouched — nothing to be consistent with
@@ -294,6 +295,25 @@ export function format(sourceCode, options = {}) {
     return found;
   }
 
+  /**
+   * Is this line over width only because of a comment at the end of it?
+   * §7.1 calls that unbreakable: the code fits, and the comment cannot be
+   * shortened or moved — moving it to its own line is a vertical-spacing
+   * change, which §3.4 forbids. Breaking the code to make room for a
+   * comment reformats the wrong thing.
+   */
+  const comments = sourceCode.getAllComments();
+  function overflowIsTrailingComment(vl) {
+    for (const comment of comments) {
+      const [start, end] = comment.range;
+      if (start < vl.start || start >= vl.end) continue;
+      if (end < vl.end) continue; // not the tail of the line
+      const code = vl.indent + text.slice(vl.start, start).trimEnd();
+      if (measureLine(code) <= maxWidth) return true;
+    }
+    return false;
+  }
+
   // Addition pass (§6 step 6): repeatedly break the outermost group that
   // contains an over-width line's overflow, until every line either fits or
   // has no legal candidate (§7.1: unbreakable lines get silence).
@@ -304,7 +324,7 @@ export function format(sourceCode, options = {}) {
   // so a group can be chosen at most once.
   for (let cursor = 0; cursor < vlines.length; ) {
     const vl = vlines[cursor];
-    if (lineWidth(text, vl) <= maxWidth) {
+    if (lineWidth(text, vl) <= maxWidth || overflowIsTrailingComment(vl)) {
       cursor++;
       continue;
     }

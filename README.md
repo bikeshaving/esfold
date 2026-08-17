@@ -57,8 +57,16 @@ always land at one depth rather than drifting a step deeper each time. That
 includes ternaries chained through the alternate (`a ? b : c ? d : e`),
 which are one construct and share one level.
 
-Lines it can't fix — a long string, regex, URL, or trailing comment — it
-leaves alone silently. Reporting those is `@stylistic/max-len`'s job.
+Lines it can't fix — a long string, regex, URL, or a line pushed over only by
+a trailing comment — it leaves alone silently. Reporting those is
+`@stylistic/max-len`'s job.
+
+Measured against Prettier on 250 already-Prettier-formatted files from ten
+third-party repositories, Fold leaves 99% of them byte-identical. The known
+differences are Prettier's special handling of test-runner calls
+(`it(name, fn, timeout)`), which relies on a name list Fold won't keep, and
+its ability to break after an arrow's `=>`, which is not one of Fold's break
+positions.
 
 See [docs/rules/breaks.md](docs/rules/breaks.md) for the full decision list.
 

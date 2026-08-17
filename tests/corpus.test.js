@@ -52,41 +52,48 @@ const all = collectFiles(CORPUS_ROOT);
 const step = Math.max(1, Math.floor(all.length / MAX_FILES));
 const files = all.filter((_, i) => i % step === 0).slice(0, MAX_FILES);
 
-function run(code) {
+function run(code, maxWidth) {
   const ast = tryParse(code);
   if (!ast) return null;
   const sourceCode = new SourceCode({ text: code, ast });
-  return applyEdits(code, format(sourceCode, { maxWidth: 80 }));
+  return applyEdits(code, format(sourceCode, { maxWidth }));
 }
 
-test(`corpus: ${files.length} files from eslint/lib`, () => {
-  let formatted = 0;
-  let changed = 0;
-  for (const file of files) {
-    const code = readFileSync(file, 'utf8');
-    if (!tryParse(code)) continue;
+// Two widths. 80 is the realistic setting, and this corpus is already
+// formatted to it — at 60 the same files need hundreds of breaks, which is
+// what makes the "did anything happen" guard below meaningful.
+for (const maxWidth of [80, 60]) {
+  test(`corpus: ${files.length} files from eslint/lib at maxWidth ${maxWidth}`, () => {
+    let formatted = 0;
+    let changed = 0;
+    for (const file of files) {
+      const code = readFileSync(file, 'utf8');
+      if (!tryParse(code)) continue;
 
-    let once;
-    try {
-      once = run(code);
-    } catch (error) {
-      assert.fail(`format threw on ${file}: ${error.stack}`);
+      let once;
+      try {
+        once = run(code, maxWidth);
+      } catch (error) {
+        assert.fail(`format threw on ${file}: ${error.stack}`);
+      }
+      formatted++;
+      if (once !== code) changed++;
+
+      // 1. Semantic preservation.
+      assert.deepEqual(
+        stripLocations(tryParse(once)),
+        stripLocations(tryParse(code)),
+        `AST changed for ${file}`,
+      );
+
+      // 2. Idempotence.
+      const twice = run(once, maxWidth);
+      assert.equal(twice, once, `not idempotent: ${file}`);
     }
-    formatted++;
-    if (once !== code) changed++;
-
-    // 1. Semantic preservation.
-    assert.deepEqual(
-      stripLocations(tryParse(once)),
-      stripLocations(tryParse(code)),
-      `AST changed for ${file}`,
-    );
-
-    // 2. Idempotence.
-    const twice = run(once);
-    assert.equal(twice, once, `not idempotent: ${file}`);
-  }
-  assert.ok(formatted > 50, `only ${formatted} corpus files parsed`);
-  // The corpus must actually exercise the formatter.
-  assert.ok(changed > 0, 'corpus produced no formatting changes at all');
-});
+    assert.ok(formatted > 50, `only ${formatted} corpus files parsed`);
+    // Guard against Fold quietly becoming a no-op.
+    if (maxWidth === 60) {
+      assert.ok(changed > 10, `only ${changed} files changed at width 60`);
+    }
+  });
+}

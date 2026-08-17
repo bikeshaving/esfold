@@ -48,6 +48,19 @@ function unbrokenWithCandidate(code, maxWidth) {
     .flatMap((group) => group.gaps)
     .filter((gap) => !isForbiddenBreak(sourceCode, gap));
 
+  // A line whose *code* fits and which is pushed over only by a comment at
+  // the end of it is unbreakable by §7.1: the comment cannot be shortened,
+  // and moving it to its own line is a vertical-spacing change (§3.4).
+  const comments = sourceCode.getAllComments();
+  const overflowIsTrailingComment = (start, end) =>
+    comments.some(
+      (c) =>
+        c.range[0] >= start &&
+        c.range[0] < end &&
+        c.range[1] >= end &&
+        measureLine(code.slice(start, c.range[0]).trimEnd()) <= maxWidth,
+    );
+
   const offenders = [];
   let position = 0;
   for (const line of code.split('\n')) {
@@ -55,6 +68,7 @@ function unbrokenWithCandidate(code, maxWidth) {
     const end = position + line.length;
     position = end + 1;
     if (measureLine(line) <= maxWidth) continue;
+    if (overflowIsTrailingComment(start, end)) continue;
     if (gaps.some((gap) => start <= gap.start && gap.end <= end)) {
       offenders.push(line.trim().slice(0, 60));
     }

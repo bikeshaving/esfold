@@ -58,6 +58,15 @@ you run both.
    it begins, so its parts sit at one depth. Ternaries chained through the
    alternate share that level.
 8. Nothing inside a template literal is ever folded.
+9. A line pushed past the limit only by a trailing comment is left alone —
+   the comment cannot be shortened, and moving it changes vertical layout.
+10. A lone import/export specifier stays inline: the module path is what
+    makes the line long, and no break inside the braces shortens it.
+11. A hugged argument's signature is part of the call's head and is never
+    broken, and a call whose last argument is a function keeps whatever
+    layout it was given.
+12. A leading `;` — the ASI guard in semicolon-less style — stays with the
+    statement it guards.
 
 ASI-hazard positions (after `return`, `throw`, `yield`, before `++`/`--`)
 and semantic units (`async function`, `new X`, unary operators, after a dot)
