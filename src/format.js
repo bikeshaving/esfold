@@ -1,4 +1,4 @@
-import { measureLine } from './measure.js';
+import { measureLine, TAB_WIDTH } from './measure.js';
 import { inferIndentUnit } from './indent.js';
 import { collectGroups } from './groups.js';
 import { isForbiddenBreak } from './forbidden.js';
@@ -100,11 +100,16 @@ function inferOperatorSide(sourceCode) {
 
 /** First source offset on the line where the width crosses maxWidth. */
 function overflowStart(text, vline, maxWidth) {
-  let width = measureLine(vline.indent);
-  if (width > maxWidth) return vline.start;
-  for (let i = vline.start; i < vline.end; i++) {
-    width = measureLine(vline.indent + text.slice(vline.start, i + 1));
-    if (width > maxWidth) return i;
+  const indentWidth = measureLine(vline.indent);
+  if (indentWidth > maxWidth) return vline.start;
+  // Advance one character at a time rather than re-measuring the whole
+  // prefix at each step, which would be quadratic in the overflow column.
+  let width = indentWidth;
+  let offset = vline.start;
+  for (const char of text.slice(vline.start, vline.end)) {
+    width += char === '\t' ? TAB_WIDTH - (width % TAB_WIDTH) : 1;
+    if (width > maxWidth) return offset;
+    offset += char.length;
   }
   return vline.end;
 }

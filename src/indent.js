@@ -12,7 +12,13 @@ export function inferIndentUnit(lines) {
     const ws = /^[ \t]*/.exec(line)[0];
     if (prev !== null && ws.length > prev.length && ws.startsWith(prev)) {
       const delta = ws.slice(prev.length);
-      counts.set(delta, (counts.get(delta) ?? 0) + 1);
+      // Only homogeneous deltas are usable as a unit. A mixed one like
+      // '\t ' comes from continuation-line alignment, not from a nesting
+      // step, and repeating it would emit exactly the tab/space mixture
+      // `no-mixed-spaces-and-tabs` exists to flag.
+      if (delta === '\t'.repeat(delta.length) || delta === ' '.repeat(delta.length)) {
+        counts.set(delta, (counts.get(delta) ?? 0) + 1);
+      }
     }
     prev = ws;
   }

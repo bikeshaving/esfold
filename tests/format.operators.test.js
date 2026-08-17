@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatText, makeSourceCode } from './helpers.js';
-import { isForbiddenBreak } from '../src/forbidden.js';
+import { formatText } from './helpers.js';
 
 test('breaks at || before touching && (§4.2)', () => {
   const code =
@@ -82,31 +81,7 @@ test('parenthesized operand stops the chain', () => {
   );
 });
 
-test('forbidden-break table (§3.2)', () => {
-  const cases = [
-    ['function f() { return  result; }', true], // after return
-    ['throw  error;', true], // after throw
-    ['function* g() { yield  x; }', true], // after yield
-    ['async  function f() {}', true], // between async and function
-    ['const c = new  Thing();', true], // between new and constructor
-    ['const b = !  flag;', true], // unary operator and operand
-    ['const t = typeof  x;', true], // unary keyword and operand
-    ['x  ++;', true], // before postfix ++
-    ['a.  b;', true], // after the dot
-    ['const s = left  + right;', false], // before a binary + is fine
-  ];
-
-  for (const [code, expected] of cases) {
-    const twoSpaces = code.indexOf('  ');
-    const sourceCode = makeSourceCode(code);
-    const gap = { start: twoSpaces, end: twoSpaces + 2 };
-    assert.equal(
-      isForbiddenBreak(sourceCode, gap),
-      expected,
-      `isForbiddenBreak for: ${code}`,
-    );
-  }
-});
+// The §3.2 table itself is tested in forbidden.test.js.
 
 // Operator-break side (§4.2 + convergence): inferred from the file like the
 // indent unit, 'after' fallback; a break on either side counts as broken.

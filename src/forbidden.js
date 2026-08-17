@@ -39,19 +39,39 @@ function looksLikeOperandEnd(token) {
 }
 
 export function isForbiddenBreak(sourceCode, gap) {
-  const next = sourceCode.getTokenByRangeStart(gap.end, {
+  const boundary = sourceCode.getTokenByRangeStart(gap.end, {
     includeComments: true,
   });
-  if (!next) return true;
-  const prev = sourceCode.getTokenBefore(next, { includeComments: true });
+  if (!boundary) return true;
+
+  // Comments do not participate in ASI, so the hazard is decided by the
+  // nearest *code* tokens on either side. Resolving these with comments
+  // included lets `return /* c */ <break> value` through — the token before
+  // the gap is the comment rather than `return`, and the break quietly turns
+  // the statement into `return undefined`.
+  const prev = sourceCode.getTokenBefore(boundary, { includeComments: false });
+  const next =
+    boundary.type === 'Line' || boundary.type === 'Block'
+      ? sourceCode.getTokenAfter(boundary, { includeComments: false })
+      : boundary;
   if (!prev) return false;
+
+  // ASI hazard: `ArrowParameters [no LineTerminator here] =>`.
+  if (next && next.type === 'Punctuator' && next.value === '=>') return true;
 
   // ASI hazards: after return / throw / yield / break / continue.
   // Semantic units: after async / function / new.
   if (prev.type === 'Keyword' && KEYWORD_NO_BREAK_AFTER.has(prev.value))
     return true;
-  if (prev.type === 'Identifier' && prev.value === 'yield') return true;
-  if (prev.type === 'Identifier' && prev.value === 'async') return true;
+  // Token *type* is unreliable for the contextual keywords: espree reports
+  // `yield` as a Keyword but `await` as an Identifier, and `async` is always
+  // an Identifier. Match on value.
+  if (
+    prev.value === 'yield' ||
+    prev.value === 'async' ||
+    prev.value === 'await'
+  )
+    return true;
 
   // `yield *` / `function *`: no break after the star either.
   if (prev.type === 'Punctuator' && prev.value === '*') {
@@ -81,7 +101,11 @@ export function isForbiddenBreak(sourceCode, gap) {
 
   // ASI hazard: before a ++ / -- (postfix). Conservatively also skips the
   // prefix case — no candidate produces it anyway.
-  if (next.type === 'Punctuator' && (next.value === '++' || next.value === '--'))
+  if (
+    next &&
+    next.type === 'Punctuator' &&
+    (next.value === '++' || next.value === '--')
+  )
     return true;
 
   // Break before the dot, never after it.
