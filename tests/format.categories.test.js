@@ -41,10 +41,13 @@ test('#7: long if condition breaks inside the parens', () => {
     'if (firstCondition && secondCondition && thirdCondition) {\n  act();\n}\n';
   assert.equal(
     formatText(code, { maxWidth: 40 }),
+    // Operands align inside a condition: the parens already supply the
+    // nesting, so a second indent step would leave the first operand a
+    // level shallower than the rest.
     'if (\n' +
       '  firstCondition &&\n' +
-      '    secondCondition &&\n' +
-      '    thirdCondition\n' +
+      '  secondCondition &&\n' +
+      '  thirdCondition\n' +
       ') {\n' +
       '  act();\n' +
       '}\n',
@@ -68,6 +71,21 @@ test('#8: for clauses break at the semicolons', () => {
       '  index += stepSize) {\n' +
       '  act(index);\n' +
       '}\n',
+  );
+});
+
+test('#7: a chain outside a condition still indents its continuation', () => {
+  // The alignment rule is specific to control-flow conditions; an argument
+  // or an assignment indents as usual.
+  assert.equal(
+    formatText('call(alphaCondition && betaCondition && gammaCondition);\n', {
+      maxWidth: 30,
+    }),
+    'call(\n' +
+      '  alphaCondition &&\n' +
+      '    betaCondition &&\n' +
+      '    gammaCondition\n' +
+      ');\n',
   );
 });
 

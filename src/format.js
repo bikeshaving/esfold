@@ -157,9 +157,25 @@ export function format(sourceCode, options = {}) {
   };
 
   function breakGroup(group, messageId) {
-    const openLine = vlines[findLine((group.range ?? group.node.range)[0])];
+    const groupStart = (group.range ?? group.node.range)[0];
+    const openLine = vlines[findLine(groupStart)];
     const baseIndent = lineIndent(text, openLine);
-    const itemIndent = baseIndent + unit;
+    // A chain inside a control-flow condition aligns its operands with the
+    // first one; the parens already supply the nesting, and stepping in
+    // again leaves the first operand a level shallower than the rest:
+    //
+    //   if (            <- the condition group already indented one level
+    //     a &&
+    //       b &&        <- what a second step produces
+    //   ) {
+    //
+    // Everywhere else — an assignment chain, a chain in an argument — the
+    // continuation is indented as usual.
+    const startsLine = text.slice(openLine.start, groupStart).trim() === '';
+    const itemIndent =
+      group.kind === 'operator' && group.inCondition && startsLine
+        ? baseIndent
+        : baseIndent + unit;
 
     for (const gap of group.gaps) {
       consumedGaps.add(gap);
@@ -280,10 +296,9 @@ export function format(sourceCode, options = {}) {
       continue;
     }
     const overflow = overflowStart(text, vl, maxWidth);
-    const usable = [...groupsOnLine(vl)].filter(
+    const breakable = [...groupsOnLine(vl)].filter(
       (group) =>
         group.addable !== false &&
-        groupRange(group)[1] > overflow &&
         group.gaps.some(
           (gap) =>
             !consumedGaps.has(gap) &&
@@ -293,6 +308,21 @@ export function format(sourceCode, options = {}) {
             !isForbiddenBreak(sourceCode, gap),
         ),
     );
+    // Prefer a group that spans the overflow: breaking one that ends before
+    // it (`foo(a) + bar(oversized...)`) would split the wrong thing. But
+    // when nothing spans it — a line pushed over by a trailing `;` or `)`
+    // that belongs to no group — fall back to any group with a gap before
+    // the overflow, which still moves that tail down. Without the fallback
+    // such a line is silently left long even though it has a legal break.
+    const spanning = breakable.filter(
+      (group) => groupRange(group)[1] > overflow,
+    );
+    const usable =
+      spanning.length > 0
+        ? spanning
+        : breakable.filter((group) =>
+            group.gaps.some((gap) => gap.start < overflow),
+          );
     if (usable.length === 0) {
       cursor++;
       continue;

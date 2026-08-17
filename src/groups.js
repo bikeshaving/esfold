@@ -243,10 +243,24 @@ function necessaryGroup(sourceCode, node) {
     }
     case 'SwitchCase': {
       if (node.consequent.length === 0) return null;
+      // `case X: {` keeps its brace on the case line, the same way a
+      // function body keeps `{` on the signature line — the block's own
+      // necessary breaks already supply the structure.
+      const braced =
+        node.consequent.length === 1 &&
+        node.consequent[0].type === 'BlockStatement';
       return {
         node,
         gaps: [
-          gapBefore(sourceCode, sourceCode.getFirstToken(node.consequent[0]), 'item'),
+          ...(braced
+            ? []
+            : [
+                gapBefore(
+                  sourceCode,
+                  sourceCode.getFirstToken(node.consequent[0]),
+                  'item',
+                ),
+              ]),
           ...statementListGaps(sourceCode, node.consequent),
         ],
       };
@@ -374,6 +388,7 @@ function conditionGroup(sourceCode, node, openAnchor, close) {
   return {
     node,
     range: [open.range[0], close.range[1]],
+    kind: 'condition',
     gaps: [gapAfter(sourceCode, open), gapBefore(sourceCode, close, 'close')],
   };
 }
@@ -527,7 +542,11 @@ function chainGroup(sourceCode, node, absorbed, operatorSide) {
     return { start: main.start, end: main.end, alt, kind: 'item', join: ' ' };
   });
   gaps.sort((a, b) => a.start - b.start);
-  return { node, gaps };
+  // `kind: 'operator'` marks a group with no bracket of its own. When such a
+  // group already starts its line, the continuation indent is the nesting
+  // signal, so its operands align to that line instead of stepping in again
+  // (see the indent choice in format.js).
+  return { node, gaps, kind: 'operator' };
 }
 
 /**
@@ -680,5 +699,21 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
       }
     }
   });
+  // A chain inside an `if` / `while` / `switch` condition aligns its
+  // operands with the first one rather than indenting past it — the parens
+  // already supply the nesting. Elsewhere (an argument, an assignment) the
+  // continuation is indented as usual. This matches what every formatter
+  // does with conditions.
+  const conditionRanges = candidates
+    .filter((group) => group.kind === 'condition')
+    .map((group) => group.range);
+  for (const group of candidates) {
+    if (group.kind !== 'operator') continue;
+    const [start, end] = group.node.range;
+    group.inCondition = conditionRanges.some(
+      (range) => range[0] <= start && end <= range[1],
+    );
+  }
+
   return { candidates, necessary };
 }

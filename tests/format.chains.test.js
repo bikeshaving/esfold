@@ -125,6 +125,20 @@ test('switch cases land on their own lines', () => {
   );
 });
 
+test('a braced case keeps its brace on the case line', () => {
+  // Same rule as a function body: the block's own breaks supply the
+  // structure, so `case X: {` does not split.
+  const code =
+    'switch (kind) {\n  case A: {\n    handle();\n    break;\n  }\n}\n';
+  assert.equal(formatText(code, { maxWidth: 80 }), code);
+  assert.equal(
+    formatText('switch (kind) { case A: { handle(); break; } }\n', {
+      maxWidth: 80,
+    }),
+    code,
+  );
+});
+
 test('class body members land on their own lines', () => {
   const code = 'class Thing { getA() { return 1; } }\n';
   assert.equal(

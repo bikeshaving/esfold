@@ -39,8 +39,18 @@ test('equal-precedence run breaks at every operator', () => {
 
 test('additive splits before multiplicative descends', () => {
   const code = 'const total = firstFactor * secondFactor + thirdFactor * fourthFactor;\n';
+  // The additive break comes first; the multiplicative one follows only
+  // because the head line is *still* over width afterwards (§4.2 descends
+  // one precedence level at a time, and only while too long).
   assert.equal(
     formatText(code, { maxWidth: 40 }),
+    'const total = firstFactor *\n' +
+      '  secondFactor +\n' +
+      '  thirdFactor * fourthFactor;\n',
+  );
+  // With room for the additive break alone, arithmetic stays intact.
+  assert.equal(
+    formatText(code, { maxWidth: 45 }),
     'const total = firstFactor * secondFactor +\n' +
       '  thirdFactor * fourthFactor;\n',
   );
