@@ -1,3 +1,4 @@
 node_modules/
+.corpus/
 *.log
 .DS_Store

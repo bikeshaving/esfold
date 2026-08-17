@@ -70,7 +70,8 @@ calls (`it(name, fn, timeout)`) using a name list Fold won't keep, and it
 treats `a = b += c` as nested assignments where Fold treats the run as one
 chain and breaks it consistently.
 
-See [docs/rules/breaks.md](docs/rules/breaks.md) for the full decision list.
+See [docs/rules/breaks.md](docs/rules/breaks.md) for the full decision list,
+and [docs/design.md](docs/design.md) for why any of it is the way it is.
 
 ## Configuration
 

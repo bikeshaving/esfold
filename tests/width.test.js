@@ -59,18 +59,22 @@ function unbrokenWithCandidate(code, maxWidth) {
   // cannot be helped by breaking: the item would land on its own line at
   // exactly the width it had. Fold declines those, so they are not
   // "unused candidates" either.
-  const pointless = (group) =>
+  // Measured at the indent the item would actually land on — the line's own
+  // indent plus one step. A fixed two spaces reads as "it would fit" for
+  // anything nested, which is how this check used to disagree with the rule.
+  const pointless = (group, indent) =>
     group.items &&
     group.items.length === 1 &&
     group.items[0] &&
     group.items[0].range &&
     !hasUsableGapInside(group, group.items[0].range) &&
-    measureLine('  ' + code.slice(...group.items[0].range)) > maxWidth;
+    measureLine(indent + '  ' + code.slice(...group.items[0].range)) > maxWidth;
 
-  const gaps = candidates
-    .filter((group) => group.addable !== false && !pointless(group))
-    .flatMap((group) => group.gaps)
-    .filter((gap) => !isForbiddenBreak(sourceCode, gap));
+  const gapsFor = (indent) =>
+    candidates
+      .filter((group) => group.addable !== false && !pointless(group, indent))
+      .flatMap((group) => group.gaps)
+      .filter((gap) => !isForbiddenBreak(sourceCode, gap));
 
   // A line whose *code* fits and which is pushed over only by a comment at
   // the end of it is unbreakable by §7.1: the comment cannot be shortened,
@@ -93,6 +97,7 @@ function unbrokenWithCandidate(code, maxWidth) {
     position = end + 1;
     if (measureLine(line) <= maxWidth) continue;
     if (overflowIsTrailingComment(start, end)) continue;
+    const gaps = gapsFor(/^[ \t]*/.exec(line)[0]);
     if (gaps.some((gap) => start <= gap.start && gap.end <= end)) {
       offenders.push(line.trim().slice(0, 60));
     }

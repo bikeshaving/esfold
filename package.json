@@ -12,7 +12,10 @@
     "docs"
   ],
   "scripts": {
-    "test": "node --test \"tests/**/*.test.js\""
+    "test": "node --test \"tests/**/*.test.js\"",
+    "corpus": "node scripts/clone-corpus.mjs",
+    "audit": "node scripts/audit.mjs",
+    "diff": "node scripts/diff-prettier.mjs"
   },
   "keywords": [
     "eslint",
@@ -28,6 +31,7 @@
   "devDependencies": {
     "@stylistic/eslint-plugin": "^5.10.0",
     "eslint": "^10.8.1",
+    "prettier": "^3.9.4",
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.67.0"
   },
