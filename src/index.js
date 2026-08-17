@@ -308,15 +308,17 @@ function isPunct(token, value) {
  * Build the gap list for a bracketed item list. Returns null when the group
  * can't be treated uniformly (empty list, sparse array elision).
  */
-function listGaps(sourceCode, open, close, items) {
+function listGaps(sourceCode, open, close, items, separators = [',']) {
   if (items.length === 0) return null;
   if (items.some((item) => item == null)) return null; // sparse array
+  const isSeparator = (t) => separators.some((value) => isPunct(t, value));
   const gaps = [gapAfter(sourceCode, open)];
   for (let i = 0; i < items.length - 1; i++) {
     // The item node's range excludes any parens wrapping it, so the
-    // separator is the nearest comma after the item, skipping close-parens.
+    // separator is the nearest one after the item, skipping close-parens.
+    // Type members may be separated by `;` as well as `,`.
     const comma = sourceCode.getTokenAfter(items[i], {
-      filter: (t) => isPunct(t, ','),
+      filter: isSeparator,
     });
     if (!comma || comma.range[0] >= close.range[0]) return null;
     // Breaks insert after the comma, but a comma-first layout
@@ -340,7 +342,7 @@ function listGaps(sourceCode, open, close, items) {
   // pushing the same comma back and forth forever.
   const closeGap = gapBefore(sourceCode, close, 'close');
   const dangling = sourceCode.getTokenBefore(close, { includeComments: true });
-  if (isPunct(dangling, ',')) {
+  if (dangling && isSeparator(dangling)) {
     const beforeDangling = sourceCode.getTokenBefore(dangling, {
       includeComments: true,
     });
@@ -791,6 +793,38 @@ function jsxGroup(sourceCode, node) {
   };
 }
 
+// Assignment operators, for the break after them (§3.3 #16).
+const ASSIGN_OPS = new Set([
+  '=', '+=', '-=', '*=', '/=', '%=', '**=',
+  '<<=', '>>=', '>>>=', '&=', '|=', '^=',
+  '&&=', '||=', '??=',
+]);
+
+/**
+ * #16: the break after an assignment's operator, putting the right-hand
+ * side on its own line.
+ *
+ * Marked `fallback`, so it is only reached when a line has no other
+ * candidate at all. When the right-hand side can break — a call, an object,
+ * a ternary — breaking *it* is better, and that is what already happens.
+ * This exists for the case where nothing inside the value can be split: a
+ * member path, a template, a cast. Those lines were simply left long.
+ */
+function assignmentGroup(sourceCode, node) {
+  const right = node.right ?? node.init;
+  if (!right) return null;
+  const operator = sourceCode.getTokenBefore(right, {
+    filter: (t) => t.type === 'Punctuator' && ASSIGN_OPS.has(t.value),
+  });
+  if (!operator || operator.range[1] > right.range[0]) return null;
+  return {
+    node,
+    kind: 'assign',
+    fallback: true,
+    gaps: [gapAfter(sourceCode, operator, ' ')],
+  };
+}
+
 /** #13: variable declarator lists, after the comma. */
 function declaratorGroup(sourceCode, node) {
   const decls = node.declarations;
@@ -936,6 +970,10 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
           const chain = chainGroup(sourceCode, node, absorbed, operatorSide);
           if (chain) candidates.push(chain);
         }
+        if (node.type === 'AssignmentExpression') {
+          const assign = assignmentGroup(sourceCode, node);
+          if (assign) candidates.push(assign);
+        }
         break;
       }
       case 'FunctionDeclaration':
@@ -1043,6 +1081,11 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
       case 'VariableDeclaration': {
         const group = declaratorGroup(sourceCode, node);
         if (group) candidates.push(group);
+        break;
+      }
+      case 'VariableDeclarator': {
+        const assign = assignmentGroup(sourceCode, node);
+        if (assign) candidates.push(assign);
         break;
       }
     }
@@ -1477,7 +1520,7 @@ export function format(sourceCode, options = {}) {
       return measureLine(indent + text.slice(itemStart, itemEnd)) > maxWidth;
     };
 
-    const breakable = [...groupsOnLine(vl)].filter(
+    const onLine = [...groupsOnLine(vl)].filter(
       (group) =>
         group.addable !== false &&
         !cannotHelp(group) &&
@@ -1490,6 +1533,41 @@ export function format(sourceCode, options = {}) {
             !isForbiddenBreak(sourceCode, gap),
         ),
     );
+    // Fallback groups (§3.3 #16, the break after an assignment operator) are
+    // last resort by construction: whenever anything inside the value can be
+    // split, splitting that reads better. They are only consulted when the
+    // line has nothing else, and only when the head they would leave behind
+    // actually fits — otherwise the break buys nothing.
+    const breakable = onLine.filter((group) => !group.fallback);
+    if (breakable.length === 0) {
+      const rescue = onLine.filter(
+        (group) =>
+          group.fallback &&
+          group.gaps.some((gap) => {
+            if (consumedGaps.has(gap) || hasBreak(gap)) return false;
+            // Both halves have to fit, or the break achieves nothing: a
+            // 200-character string moved onto its own line is still a
+            // 200-character line, one line further down.
+            const head = text.slice(vl.start, gap.start).trimEnd();
+            const tail = text.slice(gap.end, vl.end);
+            return (
+              measureLine(vl.indent + head) <= maxWidth &&
+              measureLine(lineIndent(text, vl) + unit + tail) <= maxWidth
+            );
+          }),
+      );
+      if (rescue.length === 0) {
+        cursor++;
+        continue;
+      }
+      rescue.sort(
+        (a, b) =>
+          groupRange(a)[0] - groupRange(b)[0] || groupRange(b)[1] - groupRange(a)[1],
+      );
+      breakGroup(rescue[0], 'overWidth');
+      continue;
+    }
+
     // Prefer a group that spans the overflow: breaking one that ends before
     // it (`foo(a) + bar(oversized...)`) would split the wrong thing. But
     // when nothing spans it — a line pushed over by a trailing `;` or `)`

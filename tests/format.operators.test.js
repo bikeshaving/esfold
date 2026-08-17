@@ -19,8 +19,11 @@ test('descends to the next precedence level only when still too long', () => {
   assert.equal(
     formatText(code, { maxWidth: 30 }),
     // Every operand sits at the same depth: a chain that already begins a
-    // continuation line does not step in again.
-    'const check = firstLongCondition &&\n' +
+    // continuation line does not step in again. The assignment break
+    // (§3.3 #16) takes the first operand down too, because leaving it on
+    // the `const check =` line kept that line over the limit.
+    'const check =\n' +
+      '  firstLongCondition &&\n' +
       '  secondLongCondition ||\n' +
       '  thirdLongCondition &&\n' +
       '  fourthLongCondition;\n',

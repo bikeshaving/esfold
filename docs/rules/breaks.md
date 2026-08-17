@@ -75,6 +75,9 @@ you run both.
 13. A break that cannot help is not made: a one-item group whose item is
     atomic and already wider than the limit is left inline, since breaking
     would put that item on a line of its own at exactly the width it had.
+14. As a last resort — when a line has no other candidate — an assignment's
+    value moves to its own line. Only when both halves fit, and only when
+    nothing inside the value could be broken instead.
 
 ASI-hazard positions (after `return`, `throw`, `yield`, before `++`/`--`)
 and semantic units (`async function`, `new X`, unary operators, after a dot)

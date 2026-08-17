@@ -77,9 +77,13 @@ test('a parenthesized chain head is one unit, never broken inside', () => {
   // indentation.
   const code =
     'const result = (alphaValue.betaProperty.gammaThing).deltaMethod().epsilonMethod();\n';
+  // The head stays whole. It no longer shares the `const result =` line,
+  // because at 50 columns that line was still over the limit and the
+  // assignment break (§3.3 #16) rescues it — every line here now fits.
   assert.equal(
     formatText(code, { maxWidth: 40 }),
-    'const result = (alphaValue.betaProperty.gammaThing)\n' +
+    'const result =\n' +
+      '  (alphaValue.betaProperty.gammaThing)\n' +
       '  .deltaMethod()\n' +
       '  .epsilonMethod();\n',
   );

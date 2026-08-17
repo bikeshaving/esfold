@@ -82,3 +82,45 @@ test('ordinary statement boundaries still break', () => {
     'doFirst();\ndoSecond();\n',
   );
 });
+
+test('the assignment break rescues a value nothing else can split', () => {
+  // §3.3 #16. A member path has nothing inside it to break, so before this
+  // position existed the line was simply left long.
+  assert.equal(
+    formatText(
+      'const resultValue = someObject.deeply.nested.property.chain.valueHere;\n',
+      { maxWidth: 60 },
+    ),
+    'const resultValue =\n  someObject.deeply.nested.property.chain.valueHere;\n',
+  );
+});
+
+test('but not when the value can break on its own', () => {
+  // Last resort means last: whenever something inside the value can be
+  // split, splitting that reads better, so these must be untouched by #16.
+  const call =
+    'const resultValue = computeSomething(alphaArgument, betaArgument, gamma);\n';
+  assert.equal(
+    formatText(call, { maxWidth: 60 }),
+    'const resultValue = computeSomething(\n' +
+      '  alphaArgument,\n' +
+      '  betaArgument,\n' +
+      '  gamma\n' +
+      ');\n',
+  );
+  const ternary =
+    'const messageText = isEnabled ? enabledDisplayLabel : disabledLabelHere;\n';
+  assert.equal(
+    formatText(ternary, { maxWidth: 60 }),
+    'const messageText = isEnabled\n' +
+      '  ? enabledDisplayLabel\n' +
+      '  : disabledLabelHere;\n',
+  );
+});
+
+test('and not when the value would not fit anyway', () => {
+  // Both halves have to fit. A 200-character string moved to its own line
+  // is still a 200-character line.
+  const code = `const s = '${'x'.repeat(200)}';\n`;
+  assert.equal(formatText(code, { maxWidth: 80 }), code);
+});

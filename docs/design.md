@@ -266,6 +266,7 @@ All of these are implemented except #14, which was cut — see below.
 | 13 | Variable declarator lists | after the comma |
 | 14 | ~~Template literal `${}` interiors~~ | **cut** — see below |
 | 15 | Arrow function bodies | after the `=>` (§4.6) |
+| 16 | Assignment values | after the operator — last resort (§4.9) |
 
 **#14 was cut, not deferred.** Splitting a method chain across an
 interpolation reads worse than the long line, and such lines are usually long
@@ -277,6 +278,17 @@ inside a `${}`.
 derived from the grammar, and this position only became obviously necessary
 against real code: without it, hugging reached *into* an arrow's body and
 split arguments that were never the problem.
+
+**#16 was added**, and is the clearest example of a blind spot this table can
+hide. §4.2 covered assignment *chains* — `a = b = c` — but never a single
+assignment, so `const x = someObject.deeply.nested.path` had no candidate at
+all: not a chain, nothing inside a member path to break. Such lines were
+classified "genuinely unbreakable" and left long, and the width test (§8 test
+4) passed on them *vacuously*, because it only flags lines that have an
+unused candidate. Across the corpus, 80 of the 1,328 over-width lines with
+no candidate were of this kind — about 6%. The lesson generalises: "no
+candidate" means either "nothing can fix this" or "we never implemented the
+thing that would," and only the first is acceptable.
 
 Everything not on this list — tagged templates, computed property names, dynamic
 `import()`, decorator positioning, sequence expressions — is **out of scope**. If
@@ -570,6 +582,31 @@ The same reasoning covers a line pushed over only by a **trailing comment**
 (§7.1 already said so; it went unimplemented until the differential found it).
 The code fits, the comment cannot be shortened, and moving it to its own line
 is a vertical-spacing change, which §3.4 forbids.
+
+### 4.9 The assignment break is a last resort
+
+Table position #16. When a line is over width and has **no other candidate at
+all**, the value moves to its own line:
+
+```js
+const resultValue =
+  someObject.deeply.nested.property.chain.valueHere;
+```
+
+It is deliberately last. Whenever anything inside the value can be split —
+a call's arguments, an object's properties, a ternary's branches — splitting
+*that* reads better, and already happens; this exists only for values with no
+internal structure: a member path, a template, a cast.
+
+Both halves must fit, or the break achieves nothing: a 200-character string
+moved onto its own line is still a 200-character line, one line further down.
+That condition is what keeps it from firing on the genuinely unfixable.
+
+One consequence was not obvious in advance. The rescue also fires on a *head*
+line left over width by an earlier break — `const check = firstLongCondition &&`
+after the operator chain has broken — so it changes some output that already
+had a primary candidate. In every case observed it made the result more
+width-compliant rather than less, which is why it was kept.
 
 ---
 

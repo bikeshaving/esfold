@@ -71,11 +71,30 @@ function unbrokenWithCandidate(code, maxWidth) {
     !hasUsableGapInside(group, group.items[0].range) &&
     measureLine(indent + '  ' + code.slice(...group.items[0].range)) > maxWidth;
 
-  const gapsFor = (indent) =>
+
+  // A fallback gap (§3.3 #16) is only a usable candidate when both halves of
+  // the break fit; otherwise the rule declines it and so must this check.
+  const fallbackHelps = (gap, lineStart, lineEnd, indent) => {
+    const head = code.slice(lineStart, gap.start).trimEnd();
+    const tail = code.slice(gap.end, lineEnd);
+    return (
+      measureLine(head) <= maxWidth &&
+      measureLine(indent + '  ' + tail) <= maxWidth
+    );
+  };
+
+  const gapsFor = (indent, lineStart, lineEnd) =>
     candidates
       .filter((group) => group.addable !== false && !pointless(group, indent))
-      .flatMap((group) => group.gaps)
-      .filter((gap) => !isForbiddenBreak(sourceCode, gap));
+      .flatMap((group) =>
+        group.gaps.map((gap) => ({ gap, fallback: group.fallback === true })),
+      )
+      .filter(({ gap }) => !isForbiddenBreak(sourceCode, gap))
+      .filter(
+        ({ gap, fallback }) =>
+          !fallback || fallbackHelps(gap, lineStart, lineEnd, indent),
+      )
+      .map(({ gap }) => gap);
 
   // A line whose *code* fits and which is pushed over only by a comment at
   // the end of it is unbreakable by §7.1: the comment cannot be shortened,
@@ -98,7 +117,7 @@ function unbrokenWithCandidate(code, maxWidth) {
     position = end + 1;
     if (measureLine(line) <= maxWidth) continue;
     if (overflowIsTrailingComment(start, end)) continue;
-    const gaps = gapsFor(/^[ \t]*/.exec(line)[0]);
+    const gaps = gapsFor(/^[ \t]*/.exec(line)[0], start, end);
     if (gaps.some((gap) => start <= gap.start && gap.end <= end)) {
       offenders.push(line.trim().slice(0, 60));
     }
