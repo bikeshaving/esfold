@@ -10,6 +10,9 @@ import { formatText } from './helpers.js';
  *   - a bracketed body keeps its bracket on the call line and breaks inside
  *   - a body that can break further takes the line after the `=>`
  *   - a body that can do neither stays put, and the call breaks instead
+ *
+ * When the arrow takes the line after the `=>`, the call's closing paren
+ * goes on its own line too: the two breaks are one decision.
  */
 
 test('a block body hugs; the brace stays on the call line', () => {
@@ -44,7 +47,8 @@ test('a call body takes the break after the arrow', () => {
       { maxWidth: 60 },
     ),
     'promise.then((response) =>\n' +
-      '  transformTheResponse(response, options, extra));\n',
+      '  transformTheResponse(response, options, extra)\n' +
+      ');\n',
   );
 });
 
@@ -55,7 +59,8 @@ test('a ternary body takes the break after the arrow', () => {
       { maxWidth: 60 },
     ),
     'items.mapIt((item) =>\n' +
-      '  item.enabled ? item.longNameValue : fallbackXY);\n',
+      '  item.enabled ? item.longNameValue : fallbackXY\n' +
+      ');\n',
   );
 });
 

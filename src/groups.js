@@ -252,7 +252,7 @@ function callGroup(sourceCode, node) {
     huggable.length === 1 &&
     (huggable[0] === args[0] || huggable[0] === args[args.length - 1])
   ) {
-    return { node, gaps, addable: false, hug: huggable[0].range };
+    return { node, gaps, items: args, addable: false, hug: huggable[0].range };
   }
   return { node, gaps, items: args, complete: !trailingFunction };
 }
@@ -827,6 +827,28 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
       }
     }
   });
+  // When a trailing arrow takes the break after its `=>`, the call's closing
+  // paren goes on its own line as well:
+  //
+  //   promise.then((response) =>
+  //     transformTheResponse(response, options, extra)
+  //   );
+  //
+  // The two breaks are one decision, so the close gap joins the arrow's
+  // group rather than staying with the call — whose own gaps do not break,
+  // since the arrow is hugging it.
+  const arrowGroups = new Map(
+    candidates.filter((g) => g.kind === 'arrow').map((g) => [g.node, g]),
+  );
+  for (const group of candidates) {
+    if (!group.items || group.items.length === 0) continue;
+    if (group.kind === 'params' || group.kind === 'arrow') continue;
+    const arrow = arrowGroups.get(group.items[group.items.length - 1]);
+    if (!arrow) continue;
+    const closeGap = group.gaps[group.gaps.length - 1];
+    if (closeGap && closeGap.kind === 'close') arrow.gaps.push(closeGap);
+  }
+
   // A hugged argument's signature is part of the call's head: the break is
   // absorbed by its body, so its parameter list must not become the next
   // candidate. Without this, `it("...", function (done) {` breaks as

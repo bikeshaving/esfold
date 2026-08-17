@@ -243,6 +243,12 @@ export function format(sourceCode, options = {}) {
     // and completing it would pull the head apart. §4.3's all-or-nothing is
     // about element lists, where a half-broken list is just untidy.
     if (group.kind === 'chain') return;
+    // An arrow group's gaps are not a list of peers: the break after `=>`
+    // and the enclosing call's closing paren are one decision, and the
+    // closing paren is broken by every ordinary call break too. Treating
+    // them as a group to "complete" would break the `=>` of every arrow
+    // sitting in an already-broken call.
+    if (group.kind === 'arrow') return;
     if (group.complete === false) return;
     const gaps = group.gaps;
     const broken = gaps.filter(hasBreak);
