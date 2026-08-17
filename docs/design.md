@@ -326,6 +326,16 @@ precedence level would make the table lie. It belongs to chain membership.
 This removed the last disagreement with Prettier: the differential is 250 of
 250 files byte-identical.
 
+No other precedence level has the same defect, and the reason is structural.
+Across the corpus only 66 of 38,011 operator runs mix operators at all — `+ -`
+(40), `* /` (22), `% /` (1), and three equality mixes — and every one is
+*left*-associative, so the walk follows `.left` and collects operands that
+really do sit at one level. Assignment was the only class where a mixed run
+follows `.right` into a nested expression and mistakes it for a peer. The two
+other right-associative cases cannot reproduce it: `**` is alone at its
+precedence, and although `??` shares level 4 with `||`, the grammar makes
+`a ?? b || c` a syntax error, so that shared level is unreachable.
+
 **#15 was added.** It is absent from the original table because that table was
 derived from the grammar, and this position only became obviously necessary
 against real code: without it, hugging reached *into* an arrow's body and
