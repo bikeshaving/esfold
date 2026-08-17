@@ -21,6 +21,10 @@ const configFor = (indentOptions) => [
   {
     plugins: { fold, '@stylistic': stylistic },
     languageOptions: { ecmaVersion: 'latest', sourceType: 'commonjs' },
+    // The corpus is ESLint's own source, whose eslint-disable comments are
+    // all "unused" under this config — ESLint's own autofix would strip
+    // them, which is noise unrelated to what this test measures.
+    linterOptions: { reportUnusedDisableDirectives: 'off' },
     rules: {
       'fold/breaks': ['error', { maxWidth: 80 }],
       '@stylistic/semi': 'error',

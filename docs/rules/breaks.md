@@ -17,10 +17,23 @@ only rule, and `maxWidth` is its only option.
   line (block bodies, class bodies, and switch cases are always multi-line;
   statement boundaries are always breaks).
 
-Every report carries a fix; `eslint --fix` applies them. A line that is too
-long but has no legal break position (a long string literal, a regex, a
-trailing comment, a single long member path) is left alone and *not*
-reported — reporting unfixable long lines is `@stylistic/max-len`'s job.
+Every report carries a fix; `eslint --fix` applies them. Each break is its own
+report and its own fix, so they interleave with other rules' fixes instead of
+clobbering them — which is why one over-width line can produce several
+reports, one per break point.
+
+A line that is too long but has no legal break position (a long string
+literal, a regex, a trailing comment, a single long member path) is left alone
+and *not* reported — reporting unfixable long lines is
+`@stylistic/max-len`'s job.
+
+## Inferred from the file, not configured
+
+The indent unit (tabs or n spaces), the line ending (a CRLF file gets CRLF
+breaks), and which side of an operator to break on are all read from the file
+being formatted, so they cannot disagree with whatever already formatted it.
+A tab scores as 4 columns when measuring width, matching
+`@stylistic/max-len`'s default.
 
 ## Break decisions (fixed, not configurable)
 

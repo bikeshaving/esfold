@@ -71,6 +71,25 @@ test('optional chaining breaks before the ?.', () => {
   );
 });
 
+test('a parenthesized chain head is one unit, never broken inside', () => {
+  // The dots inside the parens sit at a different bracket depth than the
+  // chain's own dots; breaking there splits a unit across the chain
+  // indentation.
+  const code =
+    'const result = (alphaValue.betaProperty.gammaThing).deltaMethod().epsilonMethod();\n';
+  assert.equal(
+    formatText(code, { maxWidth: 40 }),
+    'const result = (alphaValue.betaProperty.gammaThing)\n' +
+      '  .deltaMethod()\n' +
+      '  .epsilonMethod();\n',
+  );
+});
+
+test('a parenthesized sub-chain can still break on its own', () => {
+  const code = 'const r = (first.second).third();\n';
+  assert.equal(formatText(code, { maxWidth: 80 }), code);
+});
+
 // Necessary breaks (§3.1) — implemented with step 6 because §4.4's shape
 // depends on block bodies always being multi-line.
 

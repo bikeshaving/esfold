@@ -289,6 +289,10 @@ function methodChainGroup(sourceCode, node, absorbed) {
       if (current.arguments.some(isBlockBodyFunction)) hasBlockBody = true;
       absorbed.add(current);
       fromCall = current.type === 'CallExpression';
+      // A parenthesized head is one unit: `(a.b.c).d().e()` breaks at .d
+      // and .e, never at the dots inside the parens, which sit at a
+      // different bracket depth than the rest of the chain.
+      if (isParenthesized(sourceCode, current.callee)) break;
       current = current.callee;
     } else if (current.type === 'MemberExpression') {
       absorbed.add(current);
@@ -302,6 +306,7 @@ function methodChainGroup(sourceCode, node, absorbed) {
         }
       }
       fromCall = false;
+      if (isParenthesized(sourceCode, current.object)) break;
       current = current.object;
     } else {
       break;
@@ -383,9 +388,12 @@ function forGroup(sourceCode, node) {
     filter: (t) => isPunct(t, ';'),
   });
   if (!semi1 || !semi2) return null;
-  const close = sourceCode.getTokenAfter(node.update, {
+  // The head's own `)` — not the first `)` after the update clause, which is
+  // that clause's own closing paren when it is parenthesized.
+  const close = sourceCode.getTokenBefore(sourceCode.getFirstToken(node.body), {
     filter: (t) => isPunct(t, ')'),
   });
+  if (!close) return null;
   return {
     node,
     range: [node.init.range[0], close.range[1]],

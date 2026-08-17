@@ -9,9 +9,10 @@ import { isForbiddenBreak } from './forbidden.js';
  * An Edit is:
  *   {
  *     range: [start, end],   // source offsets; text in this range is replaced
- *     text: string,          // replacement ('\n' + indent for an insert)
+ *     text: string,          // replacement (newline + indent)
  *     loc: { start, end },   // where the rule reports it — the real token
- *     messageId: string,     // 'overWidth' | 'unnecessaryBreak'
+ *     messageId: string,     // 'overWidth' | 'necessaryBreak' |
+ *                            //   'inconsistentGroup'
  *     data?: object,         // message interpolation data
  *   }
  *
@@ -52,6 +53,22 @@ function lineWidth(text, vline) {
 /** Leading whitespace the line will have once edits apply. */
 function lineIndent(text, vline) {
   return vline.indent + /^[ \t]*/.exec(text.slice(vline.start, vline.end))[0];
+}
+
+/**
+ * The file's line ending, inferred like the indent unit (§7). Inserting a
+ * bare '\n' into a CRLF file would leave mixed endings behind — a diff on
+ * every touched line for Windows projects, and a fight with
+ * `@stylistic/linebreak-style`.
+ */
+function inferNewline(text) {
+  let crlf = 0;
+  let lf = 0;
+  for (let i = text.indexOf('\n'); i !== -1; i = text.indexOf('\n', i + 1)) {
+    if (text[i - 1] === '\r') crlf++;
+    else lf++;
+  }
+  return crlf > lf ? '\r\n' : '\n';
 }
 
 /**
@@ -101,10 +118,11 @@ export function format(sourceCode, options = {}) {
     inferred = {
       unit: inferIndentUnit(sourceCode.lines),
       operatorSide: inferOperatorSide(sourceCode),
+      newline: inferNewline(sourceCode.text),
     };
     indentCache.set(sourceCode, inferred);
   }
-  const { unit, operatorSide } = inferred;
+  const { unit, operatorSide, newline } = inferred;
 
   const { candidates, necessary } = collectGroups(sourceCode, operatorSide);
   const vlines = physicalLines(text);
@@ -162,7 +180,7 @@ export function format(sourceCode, options = {}) {
       const loc = sourceCode.getLocFromIndex(gap.end);
       edits.push({
         range: [gap.start, gap.end],
-        text: '\n' + newIndent,
+        text: newline + newIndent,
         loc: { start: loc, end: loc },
         messageId,
         data: { maxWidth: String(maxWidth) },
@@ -216,37 +234,69 @@ export function format(sourceCode, options = {}) {
     completeGroup(group);
   }
 
+  // Gap position index. Without it, every over-width line would scan every
+  // candidate group in the file, making the addition pass quadratic in file
+  // size — seconds per pass on a large file, times ten fix passes.
+  const gapIndex = [];
+  for (const group of candidates) {
+    for (const gap of group.gaps) gapIndex.push({ gap, group });
+  }
+  gapIndex.sort((a, b) => a.gap.start - b.gap.start);
+  const gapStarts = gapIndex.map((entry) => entry.gap.start);
+
+  /** Candidate groups holding at least one gap that lies within `vl`. */
+  function groupsOnLine(vl) {
+    let lo = 0;
+    let hi = gapStarts.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (gapStarts[mid] < vl.start) lo = mid + 1;
+      else hi = mid;
+    }
+    const found = new Set();
+    for (let i = lo; i < gapIndex.length && gapStarts[i] <= vl.end; i++) {
+      if (gapIndex[i].gap.end <= vl.end) found.add(gapIndex[i].group);
+    }
+    return found;
+  }
+
   // Addition pass (§6 step 6): repeatedly break the outermost group that
   // contains an over-width line's overflow, until every line either fits or
   // has no legal candidate (§7.1: unbreakable lines get silence).
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const vl of [...vlines]) {
-      if (lineWidth(text, vl) <= maxWidth) continue;
-      const overflow = overflowStart(text, vl, maxWidth);
-      const usable = candidates.filter(
-        (group) =>
-          group.addable !== false &&
-          groupRange(group)[1] > overflow &&
-          group.gaps.some(
-            (gap) =>
-              !consumedGaps.has(gap) &&
-              !hasBreak(gap) &&
-              vl.start <= gap.start &&
-              gap.end <= vl.end &&
-              !isForbiddenBreak(sourceCode, gap),
-          ),
-      );
-      if (usable.length === 0) continue;
-      usable.sort(
-        (a, b) =>
-          groupRange(a)[0] - groupRange(b)[0] || groupRange(b)[1] - groupRange(a)[1],
-      );
-      breakGroup(usable[0], 'overWidth');
-      changed = true;
-      break;
+  //
+  // The cursor does not advance after a break: the line was split, so the
+  // first half is re-examined in case it is still too long. Termination is
+  // by exhaustion — breakGroup consumes every gap of the group it breaks,
+  // so a group can be chosen at most once.
+  for (let cursor = 0; cursor < vlines.length; ) {
+    const vl = vlines[cursor];
+    if (lineWidth(text, vl) <= maxWidth) {
+      cursor++;
+      continue;
     }
+    const overflow = overflowStart(text, vl, maxWidth);
+    const usable = [...groupsOnLine(vl)].filter(
+      (group) =>
+        group.addable !== false &&
+        groupRange(group)[1] > overflow &&
+        group.gaps.some(
+          (gap) =>
+            !consumedGaps.has(gap) &&
+            !hasBreak(gap) &&
+            vl.start <= gap.start &&
+            gap.end <= vl.end &&
+            !isForbiddenBreak(sourceCode, gap),
+        ),
+    );
+    if (usable.length === 0) {
+      cursor++;
+      continue;
+    }
+    usable.sort(
+      (a, b) =>
+        groupRange(a)[0] - groupRange(b)[0] || groupRange(b)[1] - groupRange(a)[1],
+    );
+    breakGroup(usable[0], 'overWidth');
   }
 
   edits.sort((a, b) => b.range[0] - a.range[0]);

@@ -71,6 +71,21 @@ test('#8: for clauses break at the semicolons', () => {
   );
 });
 
+test('#8: a parenthesized update clause does not truncate the for group', () => {
+  const code =
+    'for (let index = initialValue; index < upperBound; (index += stepSize)) {\n' +
+    '  act(index);\n' +
+    '}\n';
+  assert.equal(
+    formatText(code, { maxWidth: 40 }),
+    'for (let index = initialValue;\n' +
+      '  index < upperBound;\n' +
+      '  (index += stepSize)) {\n' +
+      '  act(index);\n' +
+      '}\n',
+  );
+});
+
 test('#9: import specifier list breaks as an object literal', () => {
   const code =
     "import { firstExport, secondExport, thirdExport } from './somewhere.js';\n";

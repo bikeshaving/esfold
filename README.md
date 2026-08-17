@@ -62,9 +62,11 @@ One option, `maxWidth` (default 80). Nothing else, ever — every option is a
 way for two codebases to format differently, which is what grows a
 `.prettierrc` ecosystem.
 
-Indentation is **inferred from the file** rather than configured, so it can't
-disagree with whatever actually formatted it. A tab counts as 4 columns when
-measuring, matching `@stylistic/max-len`'s default.
+Everything else is **inferred from the file** rather than configured, so it
+can't disagree with whatever actually formatted it: the indent unit (tabs or
+n spaces), the line ending (a CRLF file gets CRLF breaks), and which side of
+an operator to break on. A tab counts as 4 columns when measuring, matching
+`@stylistic/max-len`'s default.
 
 ## Compatibility
 
