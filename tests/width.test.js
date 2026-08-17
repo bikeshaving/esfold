@@ -43,8 +43,32 @@ function unbrokenWithCandidate(code, maxWidth) {
   const ast = parse(code);
   const sourceCode = new SourceCode({ text: code, ast });
   const { candidates } = collectGroups(sourceCode, 'after');
+  const usable = (group, gap) =>
+    !isForbiddenBreak(sourceCode, gap) && group.addable !== false;
+  const hasUsableGapInside = (group, [from, to]) =>
+    candidates.some((other) =>
+      other.gaps.some(
+        (gap) =>
+          !group.gaps.includes(gap) &&
+          from <= gap.start &&
+          gap.end <= to &&
+          usable(other, gap),
+      ),
+    );
+  // A group whose single item is atomic and already wider than the limit
+  // cannot be helped by breaking: the item would land on its own line at
+  // exactly the width it had. Fold declines those, so they are not
+  // "unused candidates" either.
+  const pointless = (group) =>
+    group.items &&
+    group.items.length === 1 &&
+    group.items[0] &&
+    group.items[0].range &&
+    !hasUsableGapInside(group, group.items[0].range) &&
+    measureLine('  ' + code.slice(...group.items[0].range)) > maxWidth;
+
   const gaps = candidates
-    .filter((group) => group.addable !== false)
+    .filter((group) => group.addable !== false && !pointless(group))
     .flatMap((group) => group.gaps)
     .filter((gap) => !isForbiddenBreak(sourceCode, gap));
 

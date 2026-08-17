@@ -48,7 +48,12 @@ you run both.
    block-bodied function arguments, in which case the chain stays flat and
    the blocks provide the structure.
 5. A lone object/array/function argument in first or last position hugs the
-   call: `fetchData(url, {` rather than an exploded argument list.
+   call: `fetchData(url, {` rather than an exploded argument list. For an
+   arrow, what the body can do decides the shape: a bracketed body keeps its
+   bracket on the call line; a body that can break further (a call, ternary,
+   JSX, template, or nested arrow) takes the line after the `=>`; a body
+   that can do neither — a member path, an arithmetic expression — stays
+   put and the call breaks around it.
 6. Fold never joins lines — a break you wrote is preserved. What it does
    enforce is consistency: a broken element list is completed to one item
    per line. A group with a comment inside, or a blank line inside, is
@@ -67,6 +72,9 @@ you run both.
     layout it was given.
 12. A leading `;` — the ASI guard in semicolon-less style — stays with the
     statement it guards.
+13. A break that cannot help is not made: a one-item group whose item is
+    atomic and already wider than the limit is left inline, since breaking
+    would put that item on a line of its own at exactly the width it had.
 
 ASI-hazard positions (after `return`, `throw`, `yield`, before `++`/`--`)
 and semantic units (`async function`, `new X`, unary operators, after a dot)

@@ -47,9 +47,11 @@ Given an over-width line, it breaks the outermost structure first, one item
 per line — arguments, array elements, object properties; operator chains at
 the lowest precedence first; method chains before the dot, except when the
 chain's arguments have block bodies and already provide the structure. A lone
-object/array/function argument hugs the call rather than exploding it. A
-group broken at *some* of its positions gets completed to all of them; a
-group containing a comment or a blank line is left exactly as written.
+object/array/function argument hugs the call rather than exploding it, and an
+arrow takes the break after its `=>` when the body can use the line. A group
+broken at *some* of its positions gets completed to all of them; a group
+containing a comment or a blank line is left exactly as written. A break that
+cannot help — a lone atomic item already wider than the limit — is not made.
 
 **No staircases.** A construct with no bracket of its own — an operator
 chain, a ternary — takes its level from the line it begins, so its parts
@@ -62,11 +64,11 @@ a trailing comment — it leaves alone silently. Reporting those is
 `@stylistic/max-len`'s job.
 
 Measured against Prettier on 250 already-Prettier-formatted files from ten
-third-party repositories, Fold leaves 99% of them byte-identical. The known
-differences are Prettier's special handling of test-runner calls
-(`it(name, fn, timeout)`), which relies on a name list Fold won't keep, and
-its ability to break after an arrow's `=>`, which is not one of Fold's break
-positions.
+third-party repositories, Fold leaves 248 of them byte-identical. The two
+remaining differences are deliberate: Prettier special-cases test-runner
+calls (`it(name, fn, timeout)`) using a name list Fold won't keep, and it
+treats `a = b += c` as nested assignments where Fold treats the run as one
+chain and breaks it consistently.
 
 See [docs/rules/breaks.md](docs/rules/breaks.md) for the full decision list.
 

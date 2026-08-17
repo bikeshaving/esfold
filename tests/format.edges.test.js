@@ -116,3 +116,45 @@ test('a template too long to fix is silent, not reported', () => {
   const code = 'const t = `' + 'x'.repeat(100) + '${value}`;\n';
   assert.equal(formatText(code, { maxWidth: 80 }), code);
 });
+
+test('a break that cannot help is not made', () => {
+  // The attribute is a single atomic string longer than the limit: breaking
+  // moves it to a line of its own at exactly the width it had, buying two
+  // extra lines and nothing else.
+  const code =
+    'function C() {\n' +
+    '  return (\n' +
+    '    <div>\n' +
+    '      <a href="https://example.com/a/very/long/path/that/exceeds/the/limit/by/a/lot/ok">\n' +
+    '        Open\n' +
+    '      </a>\n' +
+    '    </div>\n' +
+    '  );\n' +
+    '}\n';
+  assert.equal(formatText(code, { maxWidth: 80 }), code);
+});
+
+test('a single atomic argument wider than the limit is left inline', () => {
+  const code = `callSomething("${'x'.repeat(90)}");\n`;
+  assert.equal(formatText(code, { maxWidth: 80 }), code);
+});
+
+test('but two items still break, even when one stays over the limit', () => {
+  // Splitting them shortens the line, which is the point; that one of them
+  // remains long is not a reason to leave them all on one line.
+  const code = `callSomething("${'x'.repeat(90)}", second);\n`;
+  assert.equal(
+    formatText(code, { maxWidth: 80 }),
+    `callSomething(\n  "${'x'.repeat(90)}",\n  second\n);\n`,
+  );
+});
+
+test('and a single argument that can itself break still breaks', () => {
+  assert.equal(
+    formatText('callSomething(inner(alphaValue, betaValue, gammaVal));\n', {
+      maxWidth: 40,
+    }),
+    // Breaking the outer call is enough here; the inner one then fits.
+    'callSomething(\n  inner(alphaValue, betaValue, gammaVal)\n);\n',
+  );
+});

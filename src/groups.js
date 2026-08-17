@@ -134,6 +134,25 @@ function listGaps(sourceCode, open, close, items) {
   return gaps;
 }
 
+// Bodies that hug by keeping their opening bracket on the call's line.
+const BRACKET_HUG_BODIES = new Set([
+  'BlockStatement',
+  'ObjectExpression',
+  'ArrayExpression',
+]);
+
+// Bodies that instead take the break after the `=>`.
+const ARROW_BREAK_BODIES = new Set([
+  'CallExpression',
+  'NewExpression',
+  'ConditionalExpression',
+  'TemplateLiteral',
+  'TaggedTemplateExpression',
+  'JSXElement',
+  'JSXFragment',
+  'ArrowFunctionExpression',
+]);
+
 function isHuggable(node) {
   if (
     node.type === 'ObjectExpression' ||
@@ -151,24 +170,46 @@ function isHuggable(node) {
     node.type === 'ArrowFunctionExpression'
   ) {
     // §4.5 hugs an argument "with its own internal structure", which is what
-    // absorbs the break: a block, or a body that is itself a bracketed
-    // group. A body with none — `(resolve) => (r.onstop = ...)` — cannot
-    // absorb anything, and hugging it only takes the call level off the
-    // table, leaving the arrow's *parameter list* as the next candidate.
+    // absorbs the break. Two shapes qualify, and they absorb it differently:
+    // a bracketed body keeps its opening bracket on the call line, while the
+    // bodies in ARROW_BREAK_BODIES take a break after the `=>` instead
+    // (§3.3 #15). Bodies in neither set — a member path, an arithmetic
+    // expression, an assignment — have nowhere to put a break, so the call
+    // itself breaks and the arrow rides along on one line.
     //
     // This test is structural on purpose. Keying it on whether the argument
     // currently spans several lines would feed back on itself: breaking
     // inside the body makes it multiline, which flips the decision on the
     // next pass, and the call explodes and re-hugs forever.
     return (
-      node.body.type === 'BlockStatement' ||
-      node.body.type === 'ObjectExpression' ||
-      node.body.type === 'ArrayExpression' ||
-      node.body.type === 'CallExpression' ||
-      node.body.type === 'NewExpression'
+      BRACKET_HUG_BODIES.has(node.body.type) ||
+      (node.type === 'ArrowFunctionExpression' &&
+        ARROW_BREAK_BODIES.has(node.body.type))
     );
   }
   return false;
+}
+
+/**
+ * The break after an arrow's `=>` (§3.3 #15). It exists only for bodies that
+ * can use the line it opens: a call or ternary that will break further, a
+ * JSX element, a template, or another arrow in a chain. For a member path or
+ * a binary expression there is nothing to gain — the body would sit alone on
+ * the new line at the same width — so those let the enclosing call break
+ * instead.
+ */
+function arrowBodyGroup(sourceCode, node) {
+  if (node.type !== 'ArrowFunctionExpression') return null;
+  if (!ARROW_BREAK_BODIES.has(node.body.type)) return null;
+  const arrow = sourceCode.getTokenBefore(node.body, {
+    filter: (t) => isPunct(t, '=>'),
+  });
+  if (!arrow) return null;
+  return {
+    node,
+    kind: 'arrow',
+    gaps: [gapAfter(sourceCode, arrow, ' ')],
+  };
 }
 
 function callGroup(sourceCode, node) {
@@ -213,7 +254,7 @@ function callGroup(sourceCode, node) {
   ) {
     return { node, gaps, addable: false, hug: huggable[0].range };
   }
-  return { node, gaps, complete: !trailingFunction };
+  return { node, gaps, items: args, complete: !trailingFunction };
 }
 
 function bracketGroup(sourceCode, node, items, openValue, closeValue) {
@@ -229,7 +270,7 @@ function bracketGroup(sourceCode, node, items, openValue, closeValue) {
   });
   if (!close) return null;
   const gaps = listGaps(sourceCode, open, close, items);
-  return gaps && { node, range: [open.range[0], close.range[1]], gaps };
+  return gaps && { node, range: [open.range[0], close.range[1]], gaps, items };
 }
 
 /**
@@ -431,7 +472,7 @@ function paramsGroup(sourceCode, node) {
   ) {
     return { node, gaps, range, kind: 'params', addable: false, hug: huggable[0].range };
   }
-  return { node, gaps, range, kind: 'params' };
+  return { node, gaps, range, kind: 'params', items: params };
 }
 
 /** #7: inside the parens of if / while / do-while / switch. */
@@ -488,7 +529,7 @@ function specifierGroup(sourceCode, node, kinds) {
   });
   if (!open || !close) return null;
   const gaps = listGaps(sourceCode, open, close, named);
-  return gaps && { node, gaps, range: [open.range[0], close.range[1]] };
+  return gaps && { node, gaps, range: [open.range[0], close.range[1]], items: named };
 }
 
 /** #11: ternaries, before ? and before :. */
@@ -520,6 +561,7 @@ function jsxGroup(sourceCode, node) {
     node.selfClosing && isPunct(beforeLast, '/') ? beforeLast : last;
   return {
     node,
+    items: attrs,
     gaps: [
       ...attrs.map((attr) =>
         gapBefore(sourceCode, sourceCode.getFirstToken(attr), 'item', ' '),
@@ -679,6 +721,11 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
       case 'FunctionDeclaration':
       case 'FunctionExpression':
       case 'ArrowFunctionExpression': {
+        // The body break comes first: for `f(x => g(a, b))` it is preferred
+        // over breaking the parameter list, and outermost-first would
+        // otherwise pick whichever starts earlier.
+        const body = arrowBodyGroup(sourceCode, node);
+        if (body) candidates.push(body);
         const group = paramsGroup(sourceCode, node);
         if (group) candidates.push(group);
         break;

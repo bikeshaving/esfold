@@ -329,9 +329,46 @@ export function format(sourceCode, options = {}) {
       continue;
     }
     const overflow = overflowStart(text, vl, maxWidth);
+    /**
+     * A one-item group whose item is atomic and already wider than the
+     * limit cannot be helped by breaking: the item lands on a line of its
+     * own at exactly the width it had. That is two extra lines bought for
+     * nothing —
+     *
+     *   <a
+     *     href="https://…107 characters…"
+     *   >
+     *
+     * Only the single-item case is excluded. With two or more items,
+     * splitting them apart shortens the line even when one of them stays
+     * over the limit.
+     */
+    const cannotHelp = (group) => {
+      if (!group.items || group.items.length !== 1) return false;
+      const item = group.items[0];
+      if (!item || !item.range) return false;
+      const [itemStart, itemEnd] = item.range;
+      const hasInnerCandidate = gapIndex.some(
+        ({ gap }) =>
+          // The group's own boundary gaps sit exactly on the item's edges
+          // (and are zero-width when the source has no spaces there), so
+          // they would otherwise look like candidates inside the item.
+          !group.gaps.includes(gap) &&
+          itemStart <= gap.start &&
+          gap.end <= itemEnd &&
+          !consumedGaps.has(gap) &&
+          !hasBreak(gap) &&
+          !isForbiddenBreak(sourceCode, gap),
+      );
+      if (hasInnerCandidate) return false;
+      const indent = lineIndent(text, vl) + unit;
+      return measureLine(indent + text.slice(itemStart, itemEnd)) > maxWidth;
+    };
+
     const breakable = [...groupsOnLine(vl)].filter(
       (group) =>
         group.addable !== false &&
+        !cannotHelp(group) &&
         group.gaps.some(
           (gap) =>
             !consumedGaps.has(gap) &&
