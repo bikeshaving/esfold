@@ -267,6 +267,8 @@ All of these are implemented except #14, which was cut — see below.
 | 14 | ~~Template literal `${}` interiors~~ | **cut** — see below |
 | 15 | Arrow function bodies | after the `=>` (§4.6) |
 | 16 | Assignment values | after the operator — last resort (§4.9) |
+| 17–22 | TypeScript type syntax | as their value counterparts (§3.5) |
+| 23 | JSX children | one per line, where whitespace allows (§3.6) |
 
 **#14 was cut, not deferred.** Splitting a method chain across an
 interpolation reads worse than the long line, and such lines are usually long
@@ -332,6 +334,76 @@ deliberately, and Fold has no way to know what.
 
 **Consequence for measuring.** Blank lines are zero-width and never trigger the
 addition pass.
+
+---
+
+### 3.5 The TypeScript type layer
+
+Positions #17–#22. The original table was derived from the ESTree grammar,
+so it described the JavaScript layer exactly and the type layer not at all.
+Type syntax always parsed safely and was never corrupted — but nothing in it
+was a break candidate, so a long union or type-argument list had no legal
+position and was left over width. "Whatever your parser handles, Fold
+handles" was a true claim about *safety* and a false one about coverage.
+
+Each position reuses the shape of its value-level counterpart, so there is
+nothing new to reason about: type arguments and parameters break like an
+argument list, a type literal or interface body like an object, a tuple like
+an array, a union or intersection like an operator chain, a conditional type
+like a ternary, a function type's parameters like a parameter list.
+
+Two things this exposed are worth keeping:
+
+- A `TSPropertySignature`'s range **includes** its trailing `;`, so "the next
+  separator after this member" lands on the *following* member's semicolon.
+  The list builder handles three shapes now: items that exclude their
+  separator, items wrapped in parens, and items that swallow it.
+- A group whose gaps all sit past the overflow cannot shorten the line.
+  `assertEqual<A, B>(value)` overflows inside the type arguments, so breaking
+  at the call's parenthesis leaves the head exactly as long as it was.
+  Selection prefers, among groups spanning the overflow, one with a gap it
+  can actually reach. That is a general rule, not a TypeScript one.
+
+---
+
+### 3.6 JSX children, and where the whitespace guarantee has to be earned
+
+Position #23. JSX is the one place in the grammar where whitespace between
+tokens is *content*, so "a newline never changes meaning" cannot be assumed
+here — and AST identity is the wrong test, since a legal break adds text
+nodes that render as nothing.
+
+Checked against TypeScript's own JSX emit, four of the six ways to break
+children are transparent and two are not. Both exceptions are the same
+thing: a break landing on a space that separates content, which JSX then
+deletes because the run now contains a newline.
+
+```jsx
+<p><a/><b/></p>       // breaking between them: no space to lose
+<p><a/> <b/></p>      // the space IS content; breaking deletes it
+<p>hi <b/></p>        // same, with the space inside the text node
+```
+
+Prettier solves the second case by emitting `{" "}`. Fold cannot: it only
+ever inserts newlines. So the rule is conservative — an element is breakable
+only when every text child is whitespace that already contains a newline, or
+there are none at all. That covers element-only children, the common React
+shape, and declines the rest rather than guessing. `{" "}` itself stays
+attached to the line it belongs to, by the same convention Prettier follows.
+
+Prose rewrapping is out for a different reason: it would mean splitting a
+`JSXText` **token**, and Fold only ever edits the whitespace *between*
+tokens.
+
+Two consequences worth stating plainly:
+
+- **The corpus comparison had to learn JSX.** It now drops exactly the text
+  nodes JSX drops — whitespace containing a newline — and only those, since
+  a blank text node without one is a real space.
+- **The parentheses are not ours.** Prettier writes `const el = (\n  <div>`;
+  Fold produces valid JSX without them, and `@stylistic/jsx-wrap-multilines`
+  already owns paren placement and is fixable. Adding them would put Fold
+  back in the business of fighting rules that already exist.
 
 ---
 

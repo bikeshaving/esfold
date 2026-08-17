@@ -787,7 +787,80 @@ function ternaryGroup(sourceCode, node) {
   };
 }
 
-/** #12: JSX attributes, as object properties. (Children are out of scope.) */
+/**
+ * #23: JSX children, one per line.
+ *
+ * JSX is the one place in the grammar where whitespace between tokens is
+ * *content*, so the usual guarantee — a newline never changes meaning —
+ * has to be earned rather than assumed. Checked against TypeScript's own
+ * JSX emit, four of the six ways to break children are transparent and two
+ * are not, and both exceptions are the same thing: a break landing on a
+ * space that separates two pieces of content. JSX drops whitespace runs
+ * containing a newline, so that space disappears.
+ *
+ *     <p><a/><b/></p>        breaking between them: no space to lose
+ *     <p><a/> <b/></p>       the space *is* content; breaking deletes it
+ *     <p>hi <b/></p>         same, with the space inside the text node
+ *
+ * Prettier solves the second case by emitting `{" "}`, which Fold cannot
+ * do — it only ever inserts newlines. So the rule is conservative: an
+ * element is breakable only when every text child is whitespace that
+ * already contains a newline, or there are no text children at all. That
+ * covers element-only children, which is the common React shape, and
+ * declines the rest rather than guessing.
+ *
+ * Prose re-wrapping is out of reach for a different reason: it would mean
+ * splitting a JSXText *token*, and Fold only ever edits the whitespace
+ * between tokens.
+ */
+function jsxChildrenGroup(sourceCode, node, opening, closing) {
+  if (!closing) return null; // self-closing: no children
+  const children = node.children ?? [];
+  const isBlank = (c) => c.type === 'JSXText' && c.value.trim() === '';
+  const content = children.filter((c) => !isBlank(c));
+  if (content.length === 0) return null;
+  // Any text child that carries significant whitespace, or blank text with
+  // no newline in it, means a break here would change what renders.
+  const unsafe = children.some(
+    (c) => c.type === 'JSXText' && (!isBlank(c) || !/[\r\n]/.test(c.value)),
+  );
+  if (unsafe) return null;
+
+  const open = sourceCode.getLastToken(opening);
+  const close = sourceCode.getFirstToken(closing);
+  if (!open || !close) return null;
+
+  // `{" "}` is how JSX writes a space that has to survive formatting, and
+  // by convention it stays on the line it belongs to — alone on a line it
+  // reads as noise. Breaking before it is safe but unhelpful, so don't.
+  const isSpaceMarker = (child) =>
+    child.type === 'JSXExpressionContainer' &&
+    child.expression?.type === 'Literal' &&
+    typeof child.expression.value === 'string' &&
+    child.expression.value.trim() === '';
+
+  const gaps = [
+    { start: open.range[1], end: content[0].range[0], kind: 'item', join: '' },
+  ];
+  for (let i = 1; i < content.length; i++) {
+    if (isSpaceMarker(content[i])) continue;
+    gaps.push({
+      start: content[i - 1].range[1],
+      end: content[i].range[0],
+      kind: 'item',
+      join: '',
+    });
+  }
+  gaps.push({
+    start: content[content.length - 1].range[1],
+    end: close.range[0],
+    kind: 'close',
+    join: '',
+  });
+  return { node, gaps, items: content };
+}
+
+/** #12: JSX attributes, as object properties. */
 function jsxGroup(sourceCode, node) {
   const attrs = node.attributes;
   if (!attrs || attrs.length === 0) return null;
@@ -1214,6 +1287,26 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
       }
       case 'JSXOpeningElement': {
         const group = jsxGroup(sourceCode, node);
+        if (group) candidates.push(group);
+        break;
+      }
+      case 'JSXElement': {
+        const group = jsxChildrenGroup(
+          sourceCode,
+          node,
+          node.openingElement,
+          node.closingElement,
+        );
+        if (group) candidates.push(group);
+        break;
+      }
+      case 'JSXFragment': {
+        const group = jsxChildrenGroup(
+          sourceCode,
+          node,
+          node.openingFragment,
+          node.closingFragment,
+        );
         if (group) candidates.push(group);
         break;
       }

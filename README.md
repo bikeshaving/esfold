@@ -101,6 +101,12 @@ essentially all of `@stylistic`:
 - **Force-break rules** (`array-element-newline`, `object-property-newline`,
   `newline-per-chained-call`, and friends) compose in any mode that *adds*
   breaks: they break, Fold keeps the group consistent.
+- **The JSX rules** compose the same way. `jsx-one-expression-per-line` does
+  unconditionally what Fold does by width, `jsx-max-props-per-line` and
+  `jsx-first-prop-new-line` shape attribute lists, and
+  `jsx-wrap-multilines` adds the parentheses around multi-line JSX that Fold
+  deliberately does not — Fold only ever inserts newlines, so paren
+  placement stays where it already had an owner.
 - **`"never"` settings conflict.** "Never break here" contradicts "keep lines
   under 80 columns"; drop the `never`. No stock preset enables one.
 - `max-len` has no fixer, so it only reports where Fold fixes.

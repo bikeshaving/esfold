@@ -118,13 +118,30 @@ export function printWidth(dir) {
   return 80;
 }
 
+/**
+ * JSX drops a whitespace run that contains a newline, so breaking between
+ * element children adds text nodes that render as nothing. Those are the
+ * only text nodes Fold ever creates (§3.3 #23 declines anything else), so
+ * dropping exactly them is what makes AST comparison meaningful for JSX.
+ * A blank text node *without* a newline is a real space and stays.
+ */
+const isDroppedByJsx = (node) =>
+  node &&
+  node.type === 'JSXText' &&
+  node.value.trim() === '' &&
+  /[\r\n]/.test(node.value);
+
 /** AST comparison that ignores position and survives BigInt literals. */
 export const stripLocations = (node) =>
   JSON.stringify(node, (key, value) => {
+    // Positions first: `range` is itself an array, so filtering arrays
+    // before this test hands back every position in the file and makes
+    // every reformatted file look like a semantic change.
     if (
       key === 'range' || key === 'loc' || key === 'start' ||
       key === 'end' || key === 'parent'
     )
       return undefined;
+    if (Array.isArray(value)) return value.filter((v) => !isDroppedByJsx(v));
     return typeof value === 'bigint' ? `${value}n` : value;
   });
