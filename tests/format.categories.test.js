@@ -74,17 +74,16 @@ test('#8: for clauses break at the semicolons', () => {
   );
 });
 
-test('#7: a chain outside a condition still indents its continuation', () => {
-  // The alignment rule is specific to control-flow conditions; an argument
-  // or an assignment indents as usual.
+test('#7: a chain in an argument aligns its operands too', () => {
+  // No staircases anywhere: the argument line already supplies the level.
   assert.equal(
     formatText('call(alphaCondition && betaCondition && gammaCondition);\n', {
       maxWidth: 30,
     }),
     'call(\n' +
       '  alphaCondition &&\n' +
-      '    betaCondition &&\n' +
-      '    gammaCondition\n' +
+      '  betaCondition &&\n' +
+      '  gammaCondition\n' +
       ');\n',
   );
 });

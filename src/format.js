@@ -129,7 +129,10 @@ export function format(sourceCode, options = {}) {
   }
   const { unit, operatorSide, newline } = inferred;
 
-  const { candidates, necessary } = collectGroups(sourceCode, operatorSide);
+  const { candidates, necessary, statementStarts } = collectGroups(
+    sourceCode,
+    operatorSide,
+  );
   const vlines = physicalLines(text);
   const edits = [];
   const consumedGaps = new Set();
@@ -160,22 +163,26 @@ export function format(sourceCode, options = {}) {
     const groupStart = (group.range ?? group.node.range)[0];
     const openLine = vlines[findLine(groupStart)];
     const baseIndent = lineIndent(text, openLine);
-    // A chain inside a control-flow condition aligns its operands with the
-    // first one; the parens already supply the nesting, and stepping in
-    // again leaves the first operand a level shallower than the rest:
+    // No staircases. An operator chain or ternary has no bracket of its
+    // own, so when it already begins a continuation line, that line's
+    // indent *is* its nesting level — stepping in again would leave its
+    // first part a level shallower than the rest:
     //
-    //   if (            <- the condition group already indented one level
+    //   call(
     //     a &&
-    //       b &&        <- what a second step produces
-    //   ) {
+    //       b &&      <- the staircase a second step produces
+    //   );
     //
-    // Everywhere else — an assignment chain, a chain in an argument — the
-    // continuation is indented as usual.
+    // A bracket-less group that begins a *statement* is different: nothing
+    // has indented it yet, so its continuation lines do step in. Ternaries
+    // chained through the alternate share one level for the same reason —
+    // `a ? b : c ? d : e` is one construct, not nested ones.
+    const bracketless = group.kind === 'operator' || group.kind === 'ternary';
     const startsLine = text.slice(openLine.start, groupStart).trim() === '';
-    const itemIndent =
-      group.kind === 'operator' && group.inCondition && startsLine
-        ? baseIndent
-        : baseIndent + unit;
+    const align =
+      group.flat === true ||
+      (bracketless && startsLine && !statementStarts.has(groupStart));
+    const itemIndent = align ? baseIndent : baseIndent + unit;
 
     for (const gap of group.gaps) {
       consumedGaps.add(gap);
@@ -230,6 +237,12 @@ export function format(sourceCode, options = {}) {
   // Fold can't know what.
   function completeGroup(group) {
     if (group.addable === false) return; // hug level never breaks (§4.5)
+    // Method chains are exempt. A chain the author broke at some dots but
+    // not others is a deliberate head/tail split — `Object.keys(value)`
+    // kept whole, then `.filter(...)` and `.map(...)` on their own lines —
+    // and completing it would pull the head apart. §4.3's all-or-nothing is
+    // about element lists, where a half-broken list is just untidy.
+    if (group.kind === 'chain') return;
     const gaps = group.gaps;
     const broken = gaps.filter(hasBreak);
     if (broken.length === 0) return; // untouched — nothing to be consistent with

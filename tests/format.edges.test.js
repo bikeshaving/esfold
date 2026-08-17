@@ -91,3 +91,28 @@ test('produces no overlapping or duplicate edit ranges', async () => {
     );
   }
 });
+
+test('never folds inside a template literal', () => {
+  // §3.3 #14 was to be a last resort; in practice splitting a chain across
+  // an interpolation reads worse than the long line, and the line is
+  // usually long because of the template's text, which no break shortens.
+  const code =
+    'report(`Unexpected text ${span.slice(index, match.index).trim()}`, spans);\n';
+  assert.equal(
+    formatText(code, { maxWidth: 60 }),
+    'report(\n' +
+      '  `Unexpected text ${span.slice(index, match.index).trim()}`,\n' +
+      '  spans\n' +
+      ');\n',
+  );
+});
+
+test('a hand-broken layout inside a template is left alone', () => {
+  const code = 'const t = `${compute(\n  alpha,\n  beta\n)} tail`;\n';
+  assert.equal(formatText(code, { maxWidth: 80 }), code);
+});
+
+test('a template too long to fix is silent, not reported', () => {
+  const code = 'const t = `' + 'x'.repeat(100) + '${value}`;\n';
+  assert.equal(formatText(code, { maxWidth: 80 }), code);
+});

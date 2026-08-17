@@ -49,11 +49,12 @@ test('measureLine agrees with max-len', () => {
   }
 });
 
-test('a tab advances to the next four-column stop', () => {
-  assert.equal(measureLine('\t'), 4);
-  assert.equal(measureLine('a\t'), 4);
+test('a tab advances to the next two-column stop', () => {
+  assert.equal(TAB_WIDTH, 2, 'matches Prettier’s default tabWidth');
+  assert.equal(measureLine('\t'), 2);
+  assert.equal(measureLine('a\t'), 2);
+  assert.equal(measureLine('ab\t'), 4);
   assert.equal(measureLine('abc\t'), 4);
-  assert.equal(measureLine('abcd\t'), 8);
 });
 
 test('indent inference reads the file', () => {

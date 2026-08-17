@@ -1,11 +1,14 @@
 /**
  * Line-width measurement (§7.1).
  *
- * A tab advances to the next 4-column tab stop. 4 matches
- * `@stylistic/max-len`'s default `tabWidth`, so a project running both rules
- * never disagrees about which lines are too long. Not configurable.
+ * A tab advances to the next 2-column tab stop. 2 matches Prettier's default
+ * `tabWidth`, which is what tab-indented codebases are overwhelmingly
+ * formatted against; scoring a tab as 4 made Fold reflow deeply-indented
+ * lines those projects already considered fine. `@stylistic/max-len` defaults
+ * to 4 instead, so a project running both should set `max-len`'s `tabWidth`
+ * to 2 to keep them agreeing. Not configurable.
  */
-export const TAB_WIDTH = 4;
+export const TAB_WIDTH = 2;
 
 /**
  * Visual width of a line of text.

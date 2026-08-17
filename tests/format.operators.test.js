@@ -18,12 +18,12 @@ test('descends to the next precedence level only when still too long', () => {
     'thirdLongCondition && fourthLongCondition;\n';
   assert.equal(
     formatText(code, { maxWidth: 30 }),
-    // The inner && chains start on their own lines, so their breaks indent
-    // one unit past those lines (§7).
+    // Every operand sits at the same depth: a chain that already begins a
+    // continuation line does not step in again.
     'const check = firstLongCondition &&\n' +
       '  secondLongCondition ||\n' +
       '  thirdLongCondition &&\n' +
-      '    fourthLongCondition;\n',
+      '  fourthLongCondition;\n',
   );
 });
 

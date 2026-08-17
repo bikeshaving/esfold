@@ -51,6 +51,12 @@ object/array/function argument hugs the call rather than exploding it. A
 group broken at *some* of its positions gets completed to all of them; a
 group containing a comment or a blank line is left exactly as written.
 
+**No staircases.** A construct with no bracket of its own — an operator
+chain, a ternary — takes its level from the line it begins, so its parts
+always land at one depth rather than drifting a step deeper each time. That
+includes ternaries chained through the alternate (`a ? b : c ? d : e`),
+which are one construct and share one level.
+
 Lines it can't fix — a long string, regex, URL, or trailing comment — it
 leaves alone silently. Reporting those is `@stylistic/max-len`'s job.
 
@@ -65,8 +71,12 @@ way for two codebases to format differently, which is what grows a
 Everything else is **inferred from the file** rather than configured, so it
 can't disagree with whatever actually formatted it: the indent unit (tabs or
 n spaces), the line ending (a CRLF file gets CRLF breaks), and which side of
-an operator to break on. A tab counts as 4 columns when measuring, matching
-`@stylistic/max-len`'s default.
+an operator to break on.
+
+A tab counts as **2 columns** when measuring, matching Prettier's default
+`tabWidth` — which is what tab-indented projects are overwhelmingly formatted
+against. `@stylistic/max-len` defaults to 4 instead, so if you run both, set
+its `tabWidth` to 2 to keep them agreeing.
 
 ## Compatibility
 

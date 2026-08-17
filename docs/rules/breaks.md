@@ -32,8 +32,9 @@ and *not* reported — reporting unfixable long lines is
 The indent unit (tabs or n spaces), the line ending (a CRLF file gets CRLF
 breaks), and which side of an operator to break on are all read from the file
 being formatted, so they cannot disagree with whatever already formatted it.
-A tab scores as 4 columns when measuring width, matching
-`@stylistic/max-len`'s default.
+A tab scores as 2 columns when measuring width, matching Prettier's default
+`tabWidth`; `@stylistic/max-len` defaults to 4, so set its `tabWidth` to 2 if
+you run both.
 
 ## Break decisions (fixed, not configurable)
 
@@ -49,9 +50,14 @@ A tab scores as 4 columns when measuring width, matching
 5. A lone object/array/function argument in first or last position hugs the
    call: `fetchData(url, {` rather than an exploded argument list.
 6. Fold never joins lines — a break you wrote is preserved. What it does
-   enforce is consistency: a group broken at some positions is completed to
-   one item per line. A group with a comment inside, or a blank line inside,
-   is frozen entirely.
+   enforce is consistency: a broken element list is completed to one item
+   per line. A group with a comment inside, or a blank line inside, is
+   frozen entirely, and a method chain is never completed — a chain broken
+   at some dots is a deliberate head/tail split.
+7. No staircases: an operator chain or ternary takes its level from the line
+   it begins, so its parts sit at one depth. Ternaries chained through the
+   alternate share that level.
+8. Nothing inside a template literal is ever folded.
 
 ASI-hazard positions (after `return`, `throw`, `yield`, before `++`/`--`)
 and semantic units (`async function`, `new X`, unary operators, after a dot)

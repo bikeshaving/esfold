@@ -71,11 +71,14 @@ const run = (code, maxWidth) => {
 };
 
 test('a line pushed over by a trailing token outside every group is broken', () => {
-  // 81 columns: the overflow is the final `;`, which belongs to no group.
-  const code =
-    'function f() {\n\tfor (;;) {\n\t\tif (a) {\n' +
-    '\t\t\tlet newKey = typeof child === "object" ? child.props.key : undefined;\n' +
-    '\t\t}\n\t}\n}\n';
+  // Exactly one column over, with the overflow being the final `;` — a
+  // token that belongs to no group. Selecting only groups that extend past
+  // the overflow finds nothing here, and the line was silently left long.
+  const head = '  const value = someCondition ? shortResult : ';
+  const line = head + 'x'.repeat(80 - head.length) + ';';
+  assert.equal(measureLine(line), 81, 'fixture must be one column over');
+
+  const code = `function f() {\n${line}\n}\n`;
   const out = run(code, 80);
   assert.notEqual(out, code, 'the over-width line was left alone');
   assert.deepEqual(unbrokenWithCandidate(out, 80), []);

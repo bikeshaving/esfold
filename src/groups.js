@@ -180,10 +180,18 @@ function callGroup(sourceCode, node) {
 
 function bracketGroup(sourceCode, node, items, openValue, closeValue) {
   const open = sourceCode.getFirstToken(node);
-  const close = sourceCode.getLastToken(node);
-  if (!isPunct(open, openValue) || !isPunct(close, closeValue)) return null;
+  if (!isPunct(open, openValue)) return null;
+  if (items.length === 0 || items.some((item) => item == null)) return null;
+  // Derived from the last item, not from the node: a TypeScript pattern
+  // carries its type annotation inside its own range, so `{a, b}: {c: D}`
+  // ends at the *annotation's* brace. Taking the node's last token would
+  // put the closing break inside the annotation.
+  const close = sourceCode.getTokenAfter(items[items.length - 1], {
+    filter: (t) => isPunct(t, closeValue),
+  });
+  if (!close) return null;
   const gaps = listGaps(sourceCode, open, close, items);
-  return gaps && { node, gaps };
+  return gaps && { node, range: [open.range[0], close.range[1]], gaps };
 }
 
 /**
@@ -339,7 +347,7 @@ function methodChainGroup(sourceCode, node, absorbed) {
       };
     })
     .sort((a, b) => a.start - b.start);
-  return { node, gaps };
+  return { node, gaps, kind: 'chain' };
 }
 
 /**
@@ -442,6 +450,7 @@ function ternaryGroup(sourceCode, node) {
   if (!question || !colon) return null;
   return {
     node,
+    kind: 'ternary',
     gaps: [
       gapBefore(sourceCode, question, 'item', ' '),
       gapBefore(sourceCode, colon, 'item', ' '),
@@ -562,7 +571,24 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
   const candidates = [];
   const necessary = [];
   const absorbed = new Set();
+  // Offsets where a statement begins. A bracket-less group starting one of
+  // these is a statement's own first token, so its continuation lines
+  // indent; a bracket-less group starting anywhere else already sits on a
+  // continuation line and must not step in again (see format.js).
+  const statementStarts = new Set();
+  // Ternaries chained through the alternate (`a ? b : c ? d : e`) are one
+  // construct, not nested ones, so they share a single indent level.
+  const flatTernaries = new Set();
   walk(sourceCode.ast, (node) => {
+    if (/(Statement|Declaration)$/.test(node.type)) {
+      statementStarts.add(node.range[0]);
+    }
+    if (
+      node.type === 'ConditionalExpression' &&
+      node.alternate.type === 'ConditionalExpression'
+    ) {
+      flatTernaries.add(node.alternate);
+    }
     const need = necessaryGroup(sourceCode, node);
     if (need) necessary.push(need);
     switch (node.type) {
@@ -684,7 +710,10 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
       }
       case 'ConditionalExpression': {
         const group = ternaryGroup(sourceCode, node);
-        if (group) candidates.push(group);
+        if (group) {
+          if (flatTernaries.has(node)) group.flat = true;
+          candidates.push(group);
+        }
         break;
       }
       case 'JSXOpeningElement': {
@@ -699,21 +728,24 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
       }
     }
   });
-  // A chain inside an `if` / `while` / `switch` condition aligns its
-  // operands with the first one rather than indenting past it — the parens
-  // already supply the nesting. Elsewhere (an argument, an assignment) the
-  // continuation is indented as usual. This matches what every formatter
-  // does with conditions.
-  const conditionRanges = candidates
-    .filter((group) => group.kind === 'condition')
-    .map((group) => group.range);
+  // Never fold inside a template literal (§3.3 #14 was to be a last
+  // resort; in practice the results — a method chain split across an
+  // interpolation — read worse than a long line, and the line is usually
+  // long because of the template's *text*, which no break can shorten).
+  // Marking these un-addable also stops the consistency pass touching them,
+  // so a hand-written layout inside an interpolation is left exactly alone.
+  const templateRanges = [];
+  walk(sourceCode.ast, (node) => {
+    if (node.type === 'TemplateLiteral') templateRanges.push(node.range);
+  });
   for (const group of candidates) {
-    if (group.kind !== 'operator') continue;
-    const [start, end] = group.node.range;
-    group.inCondition = conditionRanges.some(
-      (range) => range[0] <= start && end <= range[1],
-    );
+    const [start, end] = group.range ?? group.node.range;
+    if (
+      templateRanges.some((range) => range[0] < start && end <= range[1])
+    ) {
+      group.addable = false;
+    }
   }
 
-  return { candidates, necessary };
+  return { candidates, necessary, statementStarts };
 }
