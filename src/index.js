@@ -314,25 +314,39 @@ function listGaps(sourceCode, open, close, items, separators = [',']) {
   const isSeparator = (t) => separators.some((value) => isPunct(t, value));
   const gaps = [gapAfter(sourceCode, open)];
   for (let i = 0; i < items.length - 1; i++) {
-    // The item node's range excludes any parens wrapping it, so the
-    // separator is the nearest one after the item, skipping close-parens.
-    // Type members may be separated by `;` as well as `,`.
-    const comma = sourceCode.getTokenAfter(items[i], {
+    // Where the break goes depends on how the parser drew the item:
+    //
+    //   foo(a, b)            item excludes the comma  -> break after it
+    //   foo((a), b)          item excludes its parens -> skip the `)` too
+    //   { a: X; b: Y }       item *includes* its `;`  -> break after the item
+    //
+    // The third is TypeScript: a TSPropertySignature's range covers its own
+    // separator, so the next separator found belongs to the following
+    // member. Landing on that one would put the break inside it.
+    const separator = sourceCode.getTokenAfter(items[i], {
       filter: isSeparator,
     });
-    if (!comma || comma.range[0] >= close.range[0]) return null;
+    const comma =
+      separator && separator.range[0] < items[i + 1].range[0]
+        ? separator
+        : items[i];
+    if (comma.range[0] >= close.range[0]) return null;
     // Breaks insert after the comma, but a comma-first layout
     // (@stylistic/comma-style "first") counts as broken too: the newline may
     // sit on either side of the comma, and collapse joins whichever side
     // holds it (leading side joins to '', no space before the comma).
-    const beforeComma = sourceCode.getTokenBefore(comma, {
-      includeComments: true,
-    });
-    gaps.push({
-      ...gapAfter(sourceCode, comma, ' '),
-      alt: { start: beforeComma.range[1], end: comma.range[0] },
-      altJoin: '',
-    });
+    if (comma === items[i]) {
+      gaps.push(gapAfter(sourceCode, comma, ' '));
+    } else {
+      const beforeComma = sourceCode.getTokenBefore(comma, {
+        includeComments: true,
+      });
+      gaps.push({
+        ...gapAfter(sourceCode, comma, ' '),
+        alt: { start: beforeComma.range[1], end: comma.range[0] },
+        altJoin: '',
+      });
+    }
   }
   // The close gap is normally between the last token and the bracket — but
   // a dangling comma can sit on either side of that break: comma-last puts
@@ -793,6 +807,131 @@ function jsxGroup(sourceCode, node) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// The TypeScript type layer (§3.3 #17–#22, §4.10)
+//
+// §3.3's table was derived from the ESTree grammar, so it covered exactly
+// the JavaScript layer. Type syntax parsed safely and was never corrupted,
+// but nothing in it was a break candidate — a long union, a type literal or
+// a type-argument list simply had no legal position and was left over
+// width. These add the type layer using the same shapes as their value
+// counterparts.
+// ---------------------------------------------------------------------------
+
+/** #17: type arguments and type parameters — `f<A, B>()`, `class C<T, U>`. */
+function typeListGroup(sourceCode, node) {
+  const items = node.params;
+  if (!items || items.length === 0) return null;
+  const open = sourceCode.getFirstToken(node);
+  const close = sourceCode.getLastToken(node);
+  if (!isPunct(open, '<') || !isPunct(close, '>')) return null;
+  const gaps = listGaps(sourceCode, open, close, items);
+  return (
+    gaps && {
+      node,
+      gaps,
+      items,
+      range: [open.range[0], close.range[1]],
+    }
+  );
+}
+
+/**
+ * #18: type literals and interface bodies — `{ a: X; b: Y }`. Members are
+ * separated by `;` as often as `,`, which is why listGaps takes a separator
+ * set rather than assuming commas.
+ */
+function typeMembersGroup(sourceCode, node, members) {
+  if (!members || members.length === 0) return null;
+  const open = sourceCode.getFirstToken(node);
+  const close = sourceCode.getLastToken(node);
+  if (!isPunct(open, '{') || !isPunct(close, '}')) return null;
+  const gaps = listGaps(sourceCode, open, close, members, [';', ',']);
+  return gaps && { node, gaps, items: members };
+}
+
+/** #19: tuple types — `[A, B, C]`, an array literal by another name. */
+function tupleTypeGroup(sourceCode, node) {
+  const items = node.elementTypes;
+  if (!items || items.length === 0) return null;
+  const open = sourceCode.getFirstToken(node);
+  const close = sourceCode.getLastToken(node);
+  if (!isPunct(open, '[') || !isPunct(close, ']')) return null;
+  const gaps = listGaps(sourceCode, open, close, items);
+  return gaps && { node, gaps, items };
+}
+
+/**
+ * #20: unions and intersections — `A | B | C`. An operator chain in the type
+ * layer, so it breaks at the operator and takes §4.7's no-staircase rule.
+ * A leading `|` or `&` is legal and already broken by convention, so only
+ * the separators *between* members become gaps.
+ */
+function typeOperatorGroup(sourceCode, node, operator) {
+  const types = node.types;
+  if (!types || types.length < 2) return null;
+  const gaps = [];
+  for (let i = 1; i < types.length; i++) {
+    const token = sourceCode.getTokenBefore(types[i], {
+      filter: (t) => isPunct(t, operator),
+    });
+    if (!token) return null;
+    const prev = sourceCode.getTokenBefore(token, { includeComments: true });
+    const next = sourceCode.getTokenAfter(token, { includeComments: true });
+    gaps.push({
+      start: prev.range[1],
+      end: token.range[0],
+      alt: { start: token.range[1], end: next.range[0] },
+      altJoin: ' ',
+      kind: 'item',
+      join: ' ',
+    });
+  }
+  return { node, gaps, kind: 'operator' };
+}
+
+/** #21: conditional types — `T extends U ? X : Y`, a ternary in the types. */
+function conditionalTypeGroup(sourceCode, node) {
+  const question = sourceCode.getTokenAfter(node.extendsType, {
+    filter: (t) => isPunct(t, '?'),
+  });
+  const colon = sourceCode.getTokenAfter(node.trueType, {
+    filter: (t) => isPunct(t, ':'),
+  });
+  if (!question || !colon) return null;
+  return {
+    node,
+    kind: 'ternary',
+    gaps: [
+      gapBefore(sourceCode, question, 'item', ' '),
+      gapBefore(sourceCode, colon, 'item', ' '),
+    ],
+  };
+}
+
+/** #22: `implements A, B` on a class heritage clause. */
+function implementsGroup(sourceCode, node) {
+  const items = node.implements;
+  if (!items || items.length < 2) return null;
+  const keyword = sourceCode.getTokenBefore(items[0], {
+    filter: (t) => t.value === 'implements',
+  });
+  if (!keyword) return null;
+  const gaps = [];
+  for (let i = 1; i < items.length; i++) {
+    const comma = sourceCode.getTokenAfter(items[i - 1], {
+      filter: (t) => isPunct(t, ','),
+    });
+    if (!comma) return null;
+    gaps.push(gapAfter(sourceCode, comma, ' '));
+  }
+  return {
+    node,
+    gaps,
+    range: [items[0].range[0], items[items.length - 1].range[1]],
+  };
+}
+
 // Assignment operators, for the break after them (§3.3 #16).
 const ASSIGN_OPS = new Set([
   '=', '+=', '-=', '*=', '/=', '%=', '**=',
@@ -1086,6 +1225,74 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
       case 'VariableDeclarator': {
         const assign = assignmentGroup(sourceCode, node);
         if (assign) candidates.push(assign);
+        break;
+      }
+
+      // The TypeScript type layer.
+      case 'TSTypeParameterInstantiation':
+      case 'TSTypeParameterDeclaration': {
+        const group = typeListGroup(sourceCode, node);
+        if (group) candidates.push(group);
+        break;
+      }
+      case 'TSTypeLiteral': {
+        const group = typeMembersGroup(sourceCode, node, node.members);
+        if (group) candidates.push(group);
+        break;
+      }
+      case 'TSInterfaceBody': {
+        const group = typeMembersGroup(sourceCode, node, node.body);
+        if (group) candidates.push(group);
+        break;
+      }
+      case 'TSTupleType': {
+        const group = tupleTypeGroup(sourceCode, node);
+        if (group) candidates.push(group);
+        break;
+      }
+      case 'TSUnionType':
+      case 'TSIntersectionType': {
+        const group = typeOperatorGroup(
+          sourceCode,
+          node,
+          node.type === 'TSUnionType' ? '|' : '&',
+        );
+        if (group) candidates.push(group);
+        break;
+      }
+      case 'TSFunctionType':
+      case 'TSConstructorType': {
+        // Same shape as a value-level parameter list — `(a: X, b: Y) => Z`.
+        const group = paramsGroup(sourceCode, node);
+        if (group) candidates.push(group);
+        break;
+      }
+      case 'TSConditionalType': {
+        const group = conditionalTypeGroup(sourceCode, node);
+        if (group) candidates.push(group);
+        break;
+      }
+      case 'ClassDeclaration':
+      case 'ClassExpression': {
+        const group = implementsGroup(sourceCode, node);
+        if (group) candidates.push(group);
+        break;
+      }
+      case 'TSTypeAliasDeclaration': {
+        // `type X = …` is neither an assignment nor a declarator, so #16
+        // did not reach it.
+        const right = node.typeAnnotation;
+        const operator =
+          right &&
+          sourceCode.getTokenBefore(right, { filter: (t) => isPunct(t, '=') });
+        if (operator) {
+          candidates.push({
+            node,
+            kind: 'assign',
+            fallback: true,
+            gaps: [gapAfter(sourceCode, operator, ' ')],
+          });
+        }
         break;
       }
     }
@@ -1577,12 +1784,24 @@ export function format(sourceCode, options = {}) {
     const spanning = breakable.filter(
       (group) => groupRange(group)[1] > overflow,
     );
+    // Among those, prefer one that can actually reach the overflow. A group
+    // whose gaps all sit *after* it cannot shorten the offending line:
+    // `assertEqual<A, B>(value)` overflows inside the type arguments, so
+    // breaking at the call's `(` leaves the head exactly as long as it was.
+    const reaching = spanning.filter((group) =>
+      group.gaps.some(
+        (gap) =>
+          gap.start < overflow && !consumedGaps.has(gap) && !hasBreak(gap),
+      ),
+    );
     const usable =
-      spanning.length > 0
-        ? spanning
-        : breakable.filter((group) =>
-            group.gaps.some((gap) => gap.start < overflow),
-          );
+      reaching.length > 0
+        ? reaching
+        : spanning.length > 0
+          ? spanning
+          : breakable.filter((group) =>
+              group.gaps.some((gap) => gap.start < overflow),
+            );
     if (usable.length === 0) {
       cursor++;
       continue;
