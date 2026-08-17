@@ -994,3 +994,22 @@ Karate API testing framework, and implies destructive force), `origami` (good
 metaphor, longer, and the whimsy earns less now that this is one rule rather than
 a tool). `eslint-plugin-origami` and `eslint-plugin-crease` are also unclaimed if
 a change of heart is wanted.
+
+**Revisited after implementation, and kept.** `origami` came up again; two
+things decided it that were not knowable when this section was written.
+
+First, §5's reversal made the metaphor stronger. "A fold is a break that
+preserves the material" was a claim about the architecture — text edits, never
+regeneration. It is now also a claim about the behaviour: Fold only ever adds
+breaks and never takes one away, and folding paper does not remove material
+either. Origami moved the other way. Origami is elaborate and constructive;
+what this turned into is one decision made minimally, deferring to the author
+and declining more than it touches. A single crease, not a crane.
+
+Second, the name sits on a shelf with `crank`, `revise`, `repeater`, `shovel`,
+`termdom`, and `libuild` — short, concrete, slightly oblique. `fold` belongs
+there; `origami` would be the one decorative name among them.
+
+The repository is `bikeshaving/fold`; the package keeps the
+`eslint-plugin-` prefix that npm and ESLint expect, matching the split used
+by `acrocase`.

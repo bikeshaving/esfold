@@ -2,6 +2,15 @@
   "name": "eslint-plugin-fold",
   "version": "0.1.0",
   "description": "A single ESLint rule, fold/breaks, that decides where the newlines go.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bikeshaving/fold.git"
+  },
+  "homepage": "https://github.com/bikeshaving/fold#readme",
+  "bugs": {
+    "url": "https://github.com/bikeshaving/fold/issues"
+  },
+  "author": "Brian Kim",
   "type": "module",
   "main": "src/index.js",
   "exports": {
