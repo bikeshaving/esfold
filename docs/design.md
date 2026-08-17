@@ -950,8 +950,8 @@ diff of a small fixture. Keep the harnesses running.
 | §8 tests 1–2 | `tests/corpus.test.js` | AST identity and idempotence over a corpus, at two widths |
 | §8 test 3 | `tests/convergence.test.js` | the real `--fix` loop beside nine `@stylistic` configurations |
 | §8 test 4 | `tests/width.test.js` | width compliance, with the exception *computed* |
-| §8 test 5 | `scripts/diff-prettier.mjs` | Prettier-format, then Fold; anything that changes is a disagreement |
-| all invariants at scale | `scripts/audit.mjs` | ten third-party repositories, each at its own print width |
+| §8 test 5 | `scripts/diff-prettier.js` | Prettier-format, then Fold; anything that changes is a disagreement |
+| all invariants at scale | `scripts/audit.js` | ten third-party repositories, each at its own print width |
 
 `npm run corpus` clones the corpus; `npm run audit` and `npm run diff` use it.
 CI runs all of it.

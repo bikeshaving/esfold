@@ -5,7 +5,7 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, existsSync } from 'node:fs';
 import { join, basename } from 'node:path';
-import { CORPUS, REPOS } from './corpus.mjs';
+import { CORPUS, REPOS } from './corpus.js';
 
 mkdirSync(CORPUS, { recursive: true });
 

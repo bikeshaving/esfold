@@ -22,9 +22,9 @@
   ],
   "scripts": {
     "test": "node --test \"tests/**/*.test.js\"",
-    "corpus": "node scripts/clone-corpus.mjs",
-    "audit": "node scripts/audit.mjs",
-    "diff": "node scripts/diff-prettier.mjs"
+    "corpus": "node scripts/clone-corpus.js",
+    "audit": "node scripts/audit.js",
+    "diff": "node scripts/diff-prettier.js"
   },
   "keywords": [
     "eslint",

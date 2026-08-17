@@ -26,7 +26,7 @@ import { measureLine } from '../src/measure.js';
 import {
   CORPUS, PARSE_OPTIONS, printWidth, requireCorpus, sample, sourceFiles,
   stripLocations,
-} from './corpus.mjs';
+} from './corpus.js';
 
 const MAX_PER_REPO = Number(process.env.MAX_FILES ?? 120);
 

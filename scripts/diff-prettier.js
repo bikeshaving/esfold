@@ -24,7 +24,7 @@ import prettier from 'prettier';
 import { format, applyEdits } from '../src/format.js';
 import {
   CORPUS, PARSE_OPTIONS, requireCorpus, sample, sourceFiles,
-} from './corpus.mjs';
+} from './corpus.js';
 
 const WIDTH = Number(process.env.WIDTH ?? 80);
 const PER_REPO = Number(process.env.N ?? 25);
