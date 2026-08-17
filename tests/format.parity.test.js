@@ -171,3 +171,26 @@ test('a shorthand method does not borrow the previous property\'s colon', () => 
     '});\n';
   assert.equal(formatText(code, { maxWidth: 80 }), code);
 });
+
+test('a compound assignment is not a peer in an `=` chain', () => {
+  // `a = b = c` hands one value to several targets, so breaking one operator
+  // and not the other is inconsistent. `a = b += c` parses as `a = (b += c)`:
+  // the mutation is nested, not a peer, and leaving it inline is correct.
+  assert.equal(
+    formatText(
+      'someObject.longPropertyName.value = anotherObject.otherProperty.value += delta;\n',
+      { maxWidth: 60 },
+    ),
+    'someObject.longPropertyName.value =\n' +
+      '  anotherObject.otherProperty.value += delta;\n',
+  );
+  assert.equal(
+    formatText(
+      'someObject.longPropertyName.value = anotherObject.otherProperty.value = delta;\n',
+      { maxWidth: 60 },
+    ),
+    'someObject.longPropertyName.value =\n' +
+      '  anotherObject.otherProperty.value =\n' +
+      '  delta;\n',
+  );
+});

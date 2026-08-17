@@ -308,6 +308,24 @@ key. A break attributed to the wrong node is a class of bug the width test
 cannot see, since the line it damages is one the group has no business
 touching.
 
+**A chain requires the same operator, not merely the same precedence.** Every
+assignment operator is precedence 2, so precedence alone made `a = b += c` one
+run — and group consistency then broke both operators because the source had
+broken one. Equal precedence is not the same relation here that it is for `+`
+and `-`: `a = b = c` hands a single value to several targets, so breaking it
+in one place and not another is genuinely inconsistent, whereas `a = b += c`
+parses as `a = (b += c)`, where the compound assignment is a nested expression
+rather than a peer link. Nothing is inconsistent about breaking the outer
+binding and leaving the inner mutation inline.
+
+This deliberately does *not* live in `BINARY_PRECEDENCE`. That table documents
+the actual grammar, where these operators really do share a precedence; the
+distinction drawn here is not one the grammar makes, so encoding it as a fake
+precedence level would make the table lie. It belongs to chain membership.
+
+This removed the last disagreement with Prettier: the differential is 250 of
+250 files byte-identical.
+
 **#15 was added.** It is absent from the original table because that table was
 derived from the grammar, and this position only became obviously necessary
 against real code: without it, hugging reached *into* an arrow's body and

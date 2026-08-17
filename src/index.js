@@ -1136,12 +1136,38 @@ function isParenthesized(sourceCode, node) {
  * `@stylistic/operator-linebreak` regardless of how it's configured — worst
  * case it inserts on the wrong side once and the fix loop settles (§2.2).
  */
+/**
+ * Every assignment operator really is precedence 2, so precedence alone puts
+ * `a = b += c` in one run — and then group consistency breaks both operators
+ * because the source broke one.
+ *
+ * But equal precedence is not the same relation here that it is for `+` and
+ * `-`. `a = b = c` is one chain handing a single value to several targets, so
+ * breaking it in one place and not another really is inconsistent. `a = b +=
+ * c` parses as `a = (b += c)`: the compound assignment is a nested
+ * expression, not a peer link, and there is nothing inconsistent about
+ * breaking the outer binding while leaving the inner mutation inline.
+ *
+ * So chain membership requires the same operator, rather than merely the same
+ * precedence. This lives here and not in BINARY_PRECEDENCE deliberately —
+ * that table documents the actual grammar, and the distinction being drawn
+ * here is not one the grammar makes.
+ */
+function sameAssignmentOperator(current, node) {
+  return (
+    current === node ||
+    current.type !== 'AssignmentExpression' ||
+    current.operator === node.operator
+  );
+}
+
 function chainGroup(sourceCode, node, absorbed, operatorSide) {
   const precedence = precedenceOf(node);
   const members = [];
   let current = node;
   while (
     precedenceOf(current) === precedence &&
+    sameAssignmentOperator(current, node) &&
     (current === node || !isParenthesized(sourceCode, current))
   ) {
     members.push(current);
