@@ -124,3 +124,33 @@ test('render is preserved across a range of shapes and widths', () => {
     }
   }
 });
+
+test('a nested element breaks at any width (§3.1)', () => {
+  // Structural, not width-driven: nobody writes `<td><input /></td>` on one
+  // line, and Prettier breaks it at any width too. 29 columns against an
+  // 80-column limit, and it still breaks.
+  assert.equal(
+    assertRenderPreserved('const a = <td><input /></td>;\n', 80),
+    'const a = <td>\n  <input />\n</td>;\n',
+  );
+});
+
+test('text-only and expression-only children stay inline', () => {
+  // These are ordinary inline values, not nesting — Prettier leaves them
+  // alone as well. They remain width-driven: long ones can still break.
+  for (const code of [
+    'const d = <b>bold text</b>;\n',
+    'const e = <span>{value}</span>;\n',
+    'const g = <Foo />;\n',
+  ]) {
+    assert.equal(formatJSX(code, 80), code);
+  }
+});
+
+test('nesting is still declined when a break would eat a space', () => {
+  // `hi ` carries a significant trailing space, so this element is not
+  // breakable at all — necessary or otherwise.
+  const code = 'const h = <p>hi <b>y</b></p>;\n';
+  assert.equal(formatJSX(code, 80), code);
+  assert.equal(emit(formatJSX(code, 20)), emit(code));
+});

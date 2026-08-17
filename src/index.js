@@ -857,7 +857,16 @@ function jsxChildrenGroup(sourceCode, node, opening, closing) {
     kind: 'close',
     join: '',
   });
-  return { node, gaps, items: content };
+  // Nesting an element inside another is a structural break, not a width
+  // one: nobody writes `<td><input /></td>` on one line, and Prettier
+  // breaks it at any width. So an element child makes this a *necessary*
+  // break (§3.1). Children that are only text or expressions stay
+  // width-driven — `<b>bold</b>` and `<span>{value}</span>` are ordinary
+  // inline values and Prettier leaves them alone too.
+  const nested = content.some(
+    (child) => child.type === 'JSXElement' || child.type === 'JSXFragment',
+  );
+  return { node, gaps, items: content, necessary: nested };
 }
 
 /** #12: JSX attributes, as object properties. */
@@ -1290,24 +1299,15 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
         if (group) candidates.push(group);
         break;
       }
-      case 'JSXElement': {
-        const group = jsxChildrenGroup(
-          sourceCode,
-          node,
-          node.openingElement,
-          node.closingElement,
-        );
-        if (group) candidates.push(group);
-        break;
-      }
+      case 'JSXElement':
       case 'JSXFragment': {
         const group = jsxChildrenGroup(
           sourceCode,
           node,
-          node.openingFragment,
-          node.closingFragment,
+          node.openingElement ?? node.openingFragment,
+          node.closingElement ?? node.closingFragment,
         );
-        if (group) candidates.push(group);
+        if (group) (group.necessary ? necessary : candidates).push(group);
         break;
       }
       case 'VariableDeclaration': {

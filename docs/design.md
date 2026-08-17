@@ -268,7 +268,7 @@ All of these are implemented except #14, which was cut — see below.
 | 15 | Arrow function bodies | after the `=>` (§4.6) |
 | 16 | Assignment values | after the operator — last resort (§4.9) |
 | 17–22 | TypeScript type syntax | as their value counterparts (§3.5) |
-| 23 | JSX children | one per line, where whitespace allows (§3.6) |
+| 23 | JSX children | one per line; nesting is necessary (§3.1, §3.6) |
 
 **#14 was cut, not deferred.** Splitting a method chain across an
 interpolation reads worse than the long line, and such lines are usually long
@@ -394,6 +394,19 @@ attached to the line it belongs to, by the same convention Prettier follows.
 Prose rewrapping is out for a different reason: it would mean splitting a
 `JSXText` **token**, and Fold only ever edits the whitespace *between*
 tokens.
+
+**Nesting is a necessary break (§3.1), not a width-driven one.** An element
+containing another element always breaks, at any width — the same rationale
+as a block body: nesting is structure, and structure gets lines. Prettier
+draws the line in exactly the same place, breaking a 29-column
+`<td><input /></td>` against an 80-column limit. Children that are only text
+or expressions stay width-driven, since `<b>bold</b>` and `<span>{value}</span>`
+are inline values rather than nesting, and Prettier leaves those alone too.
+
+This was checked rather than assumed: across the corpus there are 697 JSX
+elements nesting another element and **zero** written on a single line.
+Making the break unconditional therefore changed nothing on 1041 real files
+— which is the evidence that it matches what people already write.
 
 Two consequences worth stating plainly:
 

@@ -78,6 +78,12 @@ you run both.
 14. As a last resort — when a line has no other candidate — an assignment's
     value moves to its own line. Only when both halves fit, and only when
     nothing inside the value could be broken instead.
+15. TypeScript type syntax breaks like its value counterpart: type arguments
+    as an argument list, type literals as objects, unions as operator
+    chains, conditional types as ternaries.
+16. A JSX element nesting another element always breaks, at any width. Text
+    and expression children stay inline unless the line is too long. Nothing
+    breaks where JSX would swallow a meaningful space.
 
 ASI-hazard positions (after `return`, `throw`, `yield`, before `++`/`--`)
 and semantic units (`async function`, `new X`, unary operators, after a dot)
