@@ -85,3 +85,31 @@ test('call-level breaks around a block-bodied hug argument are preserved', () =>
     ');\n';
   assert.equal(formatText(code, { maxWidth: 80 }), code);
 });
+
+test('an expression-bodied arrow does not hug', () => {
+  // §4.5 hugs an argument "with its own internal structure" — that is what
+  // absorbs the break. A bare expression body has none, and hugging one only
+  // takes the call level off the table, leaving the arrow's parameter list
+  // as the next candidate.
+  assert.equal(
+    formatText(
+      'const p = new Promise((resolve) => (r.onstop = () => resolve(undefined)));\n',
+      { maxWidth: 60 },
+    ),
+    'const p = new Promise(\n' +
+      '  (resolve) => (r.onstop = () => resolve(undefined))\n' +
+      ');\n',
+  );
+});
+
+test('an object-bodied arrow still hugs', () => {
+  assert.equal(
+    formatText('items.map((item) => ({identifier: item.id, label: item.name}));\n', {
+      maxWidth: 40,
+    }),
+    'items.map((item) => ({\n' +
+      '  identifier: item.id,\n' +
+      '  label: item.name\n' +
+      '}));\n',
+  );
+});

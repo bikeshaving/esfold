@@ -135,17 +135,40 @@ function listGaps(sourceCode, open, close, items) {
 }
 
 function isHuggable(node) {
-  return (
+  if (
     node.type === 'ObjectExpression' ||
     node.type === 'ArrayExpression' ||
-    node.type === 'FunctionExpression' ||
-    node.type === 'ArrowFunctionExpression' ||
     // The pattern equivalents, for parameter lists (§3.3 #6 "as call
     // arguments" — a lone destructured parameter hugs like an options
     // object).
     node.type === 'ObjectPattern' ||
     node.type === 'ArrayPattern'
-  );
+  ) {
+    return true;
+  }
+  if (
+    node.type === 'FunctionExpression' ||
+    node.type === 'ArrowFunctionExpression'
+  ) {
+    // §4.5 hugs an argument "with its own internal structure", which is what
+    // absorbs the break: a block, or a body that is itself a bracketed
+    // group. A body with none — `(resolve) => (r.onstop = ...)` — cannot
+    // absorb anything, and hugging it only takes the call level off the
+    // table, leaving the arrow's *parameter list* as the next candidate.
+    //
+    // This test is structural on purpose. Keying it on whether the argument
+    // currently spans several lines would feed back on itself: breaking
+    // inside the body makes it multiline, which flips the decision on the
+    // next pass, and the call explodes and re-hugs forever.
+    return (
+      node.body.type === 'BlockStatement' ||
+      node.body.type === 'ObjectExpression' ||
+      node.body.type === 'ArrayExpression' ||
+      node.body.type === 'CallExpression' ||
+      node.body.type === 'NewExpression'
+    );
+  }
+  return false;
 }
 
 function callGroup(sourceCode, node) {
