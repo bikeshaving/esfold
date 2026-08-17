@@ -21,6 +21,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
+      # The published artifact is built, not the source tree, so a build
+      # failure has to fail here rather than at publish time.
+      - run: npm run build
 
   eslint-versions:
     # The manifest claims eslint >=9, so both majors get exercised.

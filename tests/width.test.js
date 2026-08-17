@@ -4,10 +4,10 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { SourceCode } from 'eslint';
 import * as espree from 'espree';
-import { format, applyEdits } from '../src/format.js';
-import { collectGroups } from '../src/groups.js';
-import { isForbiddenBreak } from '../src/forbidden.js';
-import { measureLine } from '../src/measure.js';
+import { format, applyEdits } from '../src/_format.js';
+import { collectGroups } from '../src/_groups.js';
+import { isForbiddenBreak } from '../src/_forbidden.js';
+import { measureLine } from '../src/_measure.js';
 
 /**
  * §8 test 4, width compliance. Every output line is within `maxWidth` unless

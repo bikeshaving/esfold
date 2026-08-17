@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { SourceCode } from 'eslint';
 import tseslint from 'typescript-eslint';
-import { format, applyEdits } from '../src/format.js';
+import { format, applyEdits } from '../src/_format.js';
 import { stripLocations } from './helpers.js';
 
 // Syntax parity (§2.4): Fold never parses anything itself, so whatever the

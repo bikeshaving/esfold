@@ -78,7 +78,7 @@ test('tabs count as four columns when measuring', () => {
 
 test('produces no overlapping or duplicate edit ranges', async () => {
   const { makeSourceCode } = await import('./helpers.js');
-  const { format } = await import('../src/format.js');
+  const { format } = await import('../src/_format.js');
   const code =
     'promise.then(() => { work(alpha, beta); }).catch(() => { fail(gamma); });\n' +
     'const nested = outer(inner(deep(a, b), c), d, { key: value, other: [1, 2] });\n';

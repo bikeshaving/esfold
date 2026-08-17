@@ -1,7 +1,7 @@
-import { measureLine, TAB_WIDTH } from './measure.js';
-import { inferIndentUnit } from './indent.js';
-import { collectGroups } from './groups.js';
-import { isForbiddenBreak } from './forbidden.js';
+import { measureLine, TAB_WIDTH } from './_measure.js';
+import { inferIndentUnit } from './_indent.js';
+import { collectGroups } from './_groups.js';
+import { isForbiddenBreak } from './_forbidden.js';
 
 /**
  * The pure core (§2.4): format(sourceCode, options) → Edit[].

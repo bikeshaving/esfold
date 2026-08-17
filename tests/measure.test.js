@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { measureLine, TAB_WIDTH } from '../src/measure.js';
-import { inferIndentUnit } from '../src/indent.js';
+import { measureLine, TAB_WIDTH } from '../src/_measure.js';
+import { inferIndentUnit } from '../src/_indent.js';
 
 /**
  * `@stylistic/max-len`'s own `computeLineLength`, transcribed. §7.1's premise

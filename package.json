@@ -12,19 +12,18 @@
   },
   "author": "Brian Kim",
   "type": "module",
-  "main": "src/index.js",
   "exports": {
     ".": "./src/index.js"
   },
   "files": [
-    "src",
     "docs"
   ],
   "scripts": {
     "test": "node --test \"tests/**/*.test.js\"",
     "corpus": "node scripts/clone-corpus.js",
     "audit": "node scripts/audit.js",
-    "diff": "node scripts/diff-prettier.js"
+    "diff": "node scripts/diff-prettier.js",
+    "build": "libuild build"
   },
   "keywords": [
     "eslint",
@@ -38,10 +37,11 @@
     "eslint": ">=9"
   },
   "devDependencies": {
+    "@b9g/libuild": "^0.2.19",
     "@stylistic/eslint-plugin": "^5.10.0",
     "eslint": "^10.8.1",
     "prettier": "^3.9.4",
-    "typescript": "^6.0.3",
+    "typescript": "^5.9.3",
     "typescript-eslint": "^8.67.0"
   },
   "engines": {

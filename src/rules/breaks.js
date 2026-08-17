@@ -1,4 +1,4 @@
-import { format, DEFAULT_MAX_WIDTH } from '../format.js';
+import { format, DEFAULT_MAX_WIDTH } from '../_format.js';
 
 /**
  * fold/breaks — decides where the newlines go.

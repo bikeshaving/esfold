@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { makeSourceCode } from './helpers.js';
-import { format } from '../src/format.js';
+import { format } from '../src/_format.js';
 
 /**
  * A guard against reintroducing a superlinear scan. The rule runs on every

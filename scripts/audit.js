@@ -19,10 +19,10 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { SourceCode } from 'eslint';
 import tseslint from 'typescript-eslint';
-import { format, applyEdits } from '../src/format.js';
-import { collectGroups } from '../src/groups.js';
-import { isForbiddenBreak } from '../src/forbidden.js';
-import { measureLine } from '../src/measure.js';
+import { format, applyEdits } from '../src/_format.js';
+import { collectGroups } from '../src/_groups.js';
+import { isForbiddenBreak } from '../src/_forbidden.js';
+import { measureLine } from '../src/_measure.js';
 import {
   CORPUS, PARSE_OPTIONS, printWidth, requireCorpus, sample, sourceFiles,
   stripLocations,

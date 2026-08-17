@@ -4,7 +4,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import * as espree from 'espree';
 import { SourceCode } from 'eslint';
-import { format, applyEdits } from '../src/format.js';
+import { format, applyEdits } from '../src/_format.js';
 import { stripLocations } from './helpers.js';
 
 /**
