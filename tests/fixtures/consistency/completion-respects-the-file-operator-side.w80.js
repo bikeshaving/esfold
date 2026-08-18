@@ -1,2 +1,2 @@
-const ok = alpha
-  && beta && gamma;
+const ok = alphaValueName
+  && betaValueName && gammaValueName && deltaValueName && epsilonValueName;

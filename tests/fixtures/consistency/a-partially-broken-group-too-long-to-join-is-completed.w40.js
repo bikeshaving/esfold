@@ -1,0 +1,2 @@
+foo(alphaArgumentName,
+  betaArgumentName, gammaArgumentName);

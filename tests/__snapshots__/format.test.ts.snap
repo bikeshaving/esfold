@@ -128,9 +128,7 @@ exports[`categories > 9-import-specifier-list-breaks-as-an-object-literal 1`] = 
 } from './somewhere.js';
 `;
 
-exports[`categories > a-partially-broken-ternary-is-completed-not-joined 1`] = `const label = isEnabled
-  ? yes
-  : no;
+exports[`categories > a-partially-broken-ternary-that-fits-is-joined 1`] = `const label = isEnabled ? yes : no;
 `;
 
 exports[`chains > a-braced-case-keeps-its-brace-on-the-case-line 1`] = `switch (kind) {
@@ -263,23 +261,20 @@ exports[`consistency > a-hugged-call-is-not-exploded-by-the-consistency-pass 1`]
 });
 `;
 
-exports[`consistency > a-partially-broken-group-is-completed-not-joined 1`] = `foo(
-  alpha,
-  beta,
-  gamma
+exports[`consistency > a-partially-broken-group-that-fits-is-joined 1`] = `foo(alpha, beta, gamma);
+`;
+
+exports[`consistency > a-partially-broken-group-too-long-to-join-is-completed 1`] = `foo(
+  alphaArgumentName,
+  betaArgumentName,
+  gammaArgumentName
 );
 `;
 
-exports[`consistency > a-partially-broken-object-literal-is-completed 1`] = `const o = {
-  alpha: 1,
-  beta: 2,
-  gamma: 3
-};
+exports[`consistency > a-partially-broken-object-literal-that-fits-is-joined 1`] = `const o = { alpha: 1, beta: 2, gamma: 3 };
 `;
 
-exports[`consistency > a-partially-broken-operator-chain-is-completed 1`] = `const ok = alpha &&
-  beta &&
-  gamma;
+exports[`consistency > a-partially-broken-operator-chain-that-fits-is-joined 1`] = `const ok = alpha && beta && gamma;
 `;
 
 exports[`consistency > an-author-break-at-an-out-of-scope-position-is-preserved 1`] = `const x =
@@ -294,9 +289,11 @@ exports[`consistency > an-fp-pipeline-keeps-its-deliberate-layout 1`] = `const p
 );
 `;
 
-exports[`consistency > completion-respects-the-file-operator-side 1`] = `const ok = alpha
-  && beta
-  && gamma;
+exports[`consistency > completion-respects-the-file-operator-side 1`] = `const ok = alphaValueName
+  && betaValueName
+  && gammaValueName
+  && deltaValueName
+  && epsilonValueName;
 `;
 
 exports[`edges > a-bom-is-preserved 1`] = `﻿const x = foo(

@@ -15,11 +15,12 @@ interface TokenOptions {
 
 type Source = TSESLint.SourceCode;
 
-/** Whitespace between two tokens where a newline may be inserted. */
+/** Whitespace between two tokens, and what a collapsed break becomes there. */
 interface Gap {
   start: number;
   end: number;
   kind: 'item' | 'close' | 'same';
+  join?: string;
   // Operator gaps carry the other side here: a newline on either side counts.
   alt?: { start: number; end: number };
 }
@@ -265,18 +266,21 @@ const BINARY_PRECEDENCE = {
   '**': 14,
 };
 
-function gapAfter(sourceCode: Source, tokenOrNode: Node | Token): Gap {
+// `join` is what a collapsed break becomes: '' for bracket and dot gaps, ' '
+// for comma and operator gaps. Necessary gaps carry none.
+function gapAfter(sourceCode: Source, tokenOrNode: Node | Token, join = ''): Gap {
   const next = sourceCode.getTokenAfter(tokenOrNode, { includeComments: true });
-  return { start: tokenOrNode.range[1], end: next!.range[0], kind: 'item' };
+  return { start: tokenOrNode.range[1], end: next!.range[0], kind: 'item', join };
 }
 
 function gapBefore(
   sourceCode: Source,
   token: Node | Token,
   kind: Gap['kind'],
+  join = '',
 ): Gap {
   const prev = sourceCode.getTokenBefore(token, { includeComments: true });
-  return { start: prev!.range[1], end: token.range[0], kind };
+  return { start: prev!.range[1], end: token.range[0], kind, join };
 }
 
 // Narrows to the punctuator subtype, not to Token: "not this punctuator" must
@@ -313,13 +317,13 @@ function listGaps(
     // Comma-first layouts count as broken too: the newline may sit on either
     // side of the comma.
     if (comma === items[i]) {
-      gaps.push(gapAfter(sourceCode, comma!));
+      gaps.push(gapAfter(sourceCode, comma!, ' '));
     } else {
       const beforeComma = sourceCode.getTokenBefore(comma!, {
         includeComments: true,
       });
       gaps.push({
-        ...gapAfter(sourceCode, comma!),
+        ...gapAfter(sourceCode, comma!, ' '),
         alt: { start: beforeComma!.range[1], end: comma!.range[0] },
       });
     }
@@ -398,7 +402,7 @@ function arrowBodyGroup(sourceCode: Source, node: TSESTree.FunctionLike): Group 
   return {
     node,
     kind: 'arrow',
-    gaps: [gapAfter(sourceCode, arrow)],
+    gaps: [gapAfter(sourceCode, arrow, ' ')],
   };
 }
 
@@ -683,7 +687,7 @@ function forGroup(sourceCode: Source, node: TSESTree.ForStatement): Group | null
   return {
     node,
     range: [node.init.range[0], close.range[1]],
-    gaps: [gapAfter(sourceCode, semi1), gapAfter(sourceCode, semi2)],
+    gaps: [gapAfter(sourceCode, semi1, ' '), gapAfter(sourceCode, semi2, ' ')],
   };
 }
 
@@ -722,8 +726,8 @@ function ternaryGroup(
     node,
     kind: 'ternary',
     gaps: [
-      gapBefore(sourceCode, question, 'item'),
-      gapBefore(sourceCode, colon, 'item'),
+      gapBefore(sourceCode, question, 'item', ' '),
+      gapBefore(sourceCode, colon, 'item', ' '),
     ],
   };
 }
@@ -755,7 +759,7 @@ function jsxChildrenGroup(
     child.expression.value.trim() === '';
 
   const gaps: Gap[] = [
-    { start: open.range[1], end: content[0].range[0], kind: 'item' },
+    { start: open.range[1], end: content[0].range[0], kind: 'item', join: '' },
   ];
   for (let i = 1; i < content.length; i++) {
     if (isSpaceMarker(content[i])) continue;
@@ -763,12 +767,14 @@ function jsxChildrenGroup(
       start: content[i - 1].range[1],
       end: content[i].range[0],
       kind: 'item',
+      join: '',
     });
   }
   gaps.push({
     start: content[content.length - 1].range[1],
     end: close.range[0],
     kind: 'close',
+    join: '',
   });
   const nested = content.some(
     (child) => child.type === 'JSXElement' || child.type === 'JSXFragment',
@@ -791,9 +797,9 @@ function jsxGroup(
     items: attrs,
     gaps: [
       ...attrs.map((attr) =>
-        gapBefore(sourceCode, sourceCode.getFirstToken(attr)!, 'item'),
+        gapBefore(sourceCode, sourceCode.getFirstToken(attr)!, 'item', ' '),
       ),
-      gapBefore(sourceCode, closeToken, 'close'),
+      gapBefore(sourceCode, closeToken, 'close', node.selfClosing ? ' ' : ''),
     ],
   };
 }
@@ -861,6 +867,7 @@ function typeOperatorGroup(
       end: token.range[0],
       alt: { start: token.range[1], end: next!.range[0] },
       kind: 'item',
+      join: ' ',
     });
   }
   return { node, gaps, kind: 'operator' };
@@ -881,8 +888,8 @@ function conditionalTypeGroup(
     node,
     kind: 'ternary',
     gaps: [
-      gapBefore(sourceCode, question, 'item'),
-      gapBefore(sourceCode, colon, 'item'),
+      gapBefore(sourceCode, question, 'item', ' '),
+      gapBefore(sourceCode, colon, 'item', ' '),
     ],
   };
 }
@@ -903,7 +910,7 @@ function implementsGroup(
       filter: (t) => isPunct(t, ','),
     });
     if (!comma) return null;
-    gaps.push(gapAfter(sourceCode, comma));
+    gaps.push(gapAfter(sourceCode, comma, ' '));
   }
   return {
     node,
@@ -946,7 +953,7 @@ function colonGroup(
     node,
     kind: 'assign',
     fallback: true,
-    gaps: [gapAfter(sourceCode, colon)],
+    gaps: [gapAfter(sourceCode, colon, ' ')],
   };
 }
 
@@ -964,7 +971,7 @@ function assignmentGroup(
     node,
     kind: 'assign',
     fallback: true,
-    gaps: [gapAfter(sourceCode, operator)],
+    gaps: [gapAfter(sourceCode, operator, ' ')],
   };
 }
 
@@ -980,7 +987,7 @@ function declaratorGroup(
       filter: (t) => isPunct(t, ','),
     });
     if (!comma) return null;
-    gaps.push(gapAfter(sourceCode, comma));
+    gaps.push(gapAfter(sourceCode, comma, ' '));
   }
   return { node, gaps };
 }
@@ -1046,7 +1053,7 @@ function chainGroup(
     const after = { start: operator!.range[1], end: next!.range[0] };
     const main = operatorSide === 'before' ? before : after;
     const alt = operatorSide === 'before' ? after : before;
-    return { start: main.start, end: main.end, alt, kind: 'item' };
+    return { start: main.start, end: main.end, alt, kind: 'item', join: ' ' };
   });
   gaps.sort((a, b) => a.start - b.start);
   return { node, gaps, kind: 'operator' };
@@ -1314,7 +1321,7 @@ function collectGroups(sourceCode: Source, operatorSide: OperatorSide = 'after')
             node,
             kind: 'assign',
             fallback: true,
-            gaps: [gapAfter(sourceCode, operator)],
+            gaps: [gapAfter(sourceCode, operator, ' ')],
           });
         }
         break;
@@ -1472,6 +1479,7 @@ function format(
   const vlines = physicalLines(text);
   const edits: Edit[] = [];
   const consumedGaps = new Set<Gap>();
+  const joined = new Set<VLine>();
 
   const rangeHasBreak = (range: { start: number; end: number }) => {
     LINE_BREAK.lastIndex = 0;
@@ -1545,8 +1553,10 @@ function format(
     (group.range ?? group.node.range) as Range;
   const BLANK_LINE = /(\r?\n)[ \t]*(\r?\n)/;
 
-  // Fold never joins lines, so a partially broken group is completed rather
-  // than collapsed. Two kinds are exempt:
+  // A partially broken group is an editing artifact rather than a layout, so
+  // it is re-decided by width: joined if it fits, completed if it does not. A
+  // fully broken group is already consistent and never reaches here, which is
+  // what keeps a deliberate layout safe. Two kinds are exempt:
   function completeGroup(group: Group) {
     if (group.addable === false) return;
     // A chain broken at some dots is a deliberate head/tail split;
@@ -1573,7 +1583,71 @@ function format(
     )
       return;
 
+    // A group that fits on one line is joined rather than completed: a list
+    // broken at one comma is more likely a stray newline than a layout. When
+    // it does not fit, completing it is the only consistent option.
+    const inline = collapsedText(group);
+    if (inline !== null && joinedFits(group, inline)) {
+      joinGroup(group);
+      return;
+    }
     breakGroup(group, 'inconsistentGroup');
+  }
+
+  /** The whitespace actually holding the newline; operator gaps have two. */
+  const brokenRange = (gap: Gap) => (rangeHasBreak(gap) ? gap : gap.alt!);
+
+  /**
+   * The group with its own breaks collapsed, or null when a break inside it
+   * belongs to something else — joining then would not produce one line.
+   */
+  function collapsedText(group: Group): string | null {
+    const [start, end] = groupRange(group);
+    const ranges = group.gaps
+      .filter(hasBreak)
+      .map((gap) => ({ range: brokenRange(gap), join: gap.join ?? '' }))
+      .filter(({ range }) => range.start >= start && range.end <= end)
+      .sort((a, b) => a.range.start - b.range.start);
+
+    let out = '';
+    let cursor = start;
+    for (const { range, join } of ranges) {
+      out += text.slice(cursor, range.start) + join;
+      cursor = range.end;
+    }
+    out += text.slice(cursor, end);
+    LINE_BREAK.lastIndex = 0;
+    return LINE_BREAK.test(out) ? null : out;
+  }
+
+  /** Whether the line the joined group would land on stays within maxWidth. */
+  function joinedFits(group: Group, inline: string): boolean {
+    const [start, end] = groupRange(group);
+    const first = vlines[findLine(start)]!;
+    const last = vlines[findLine(end)] ?? first;
+    const head = first.indent + text.slice(first.start, start);
+    const tail = text.slice(end, last.end);
+    return measureLine(head + inline + tail, tabWidth) <= maxWidth;
+  }
+
+  function joinGroup(group: Group) {
+    const [start, end] = groupRange(group);
+    for (const gap of group.gaps) {
+      consumedGaps.add(gap);
+      if (!hasBreak(gap)) continue;
+      const range = brokenRange(gap);
+      if (range.start < start || range.end > end) continue;
+      const loc = sourceCode.getLocFromIndex(range.end);
+      edits.push({
+        range: [range.start, range.end],
+        text: gap.join ?? '',
+        loc: { start: loc, end: loc },
+        messageId: 'inconsistentGroup',
+      });
+    }
+    // The projection still describes the unjoined text, so leave these lines
+    // to the next fix pass rather than measuring them wrong now.
+    for (let i = findLine(start); i <= findLine(end); i++) joined.add(vlines[i]!);
   }
 
   const outermostFirst = [...candidates].sort(
@@ -1625,7 +1699,11 @@ function format(
   // advance; breakGroup consumes a group's gaps, so this ends by exhaustion.
   for (let cursor = 0; cursor < vlines.length; ) {
     const vl = vlines[cursor];
-    if (lineWidth(text, vl, tabWidth) <= maxWidth || overflowIsTrailingComment(vl)) {
+    if (
+      joined.has(vl) ||
+      lineWidth(text, vl, tabWidth) <= maxWidth ||
+      overflowIsTrailingComment(vl)
+    ) {
       cursor++;
       continue;
     }
@@ -1736,7 +1814,7 @@ const breaks: TSESLint.RuleModule<MessageId, Options> = {
   meta: {
     type: 'layout',
     docs: {
-      description: 'Insert the line breaks a file needs to fit a maximum width.',
+      description: 'Insert and remove line breaks to fit a maximum width.',
     },
     fixable: 'whitespace',
     schema: [
