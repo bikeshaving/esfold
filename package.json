@@ -23,7 +23,9 @@
     "corpus": "node scripts/clone-corpus.js",
     "audit": "node scripts/audit.js",
     "diff": "node scripts/diff-prettier.js",
-    "build": "libuild build"
+    "build": "libuild build",
+    "stage": "libuild stage --provenance",
+    "prepublishOnly": "node -e \"console.error('\\nRefusing to publish the repository root: its files field excludes src/, so the tarball would carry documentation and no code.\\nRun npm run stage instead -- libuild builds dist/ and publishes from in there.\\n'); process.exit(1)\""
   },
   "keywords": [
     "eslint",
