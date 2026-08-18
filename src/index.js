@@ -2,12 +2,6 @@
  * eslint-plugin-fold — `fold/breaks`, the rule that decides where the
  * newlines go. See docs/design.md; the § references throughout point at it.
  *
- * One file on purpose. The pieces below were once six modules, but nothing
- * imported them except each other and the tests, they are meaningless
- * separately, and the build bundles them back into one file regardless.
- * The sections run from the primitives outward: measurement, then the break
- * grammar, then the algorithm that uses it, then the ESLint adapter.
- *
  * No ESLint imports (§2.4) — `sourceCode` is consumed structurally, so the
  * core is testable without spinning up a linter.
  */

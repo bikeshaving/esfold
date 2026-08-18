@@ -13,24 +13,30 @@
   "author": "Brian Kim",
   "type": "module",
   "exports": {
-    ".": "./src/index.js"
+    ".": {
+      "import": "./dist/index.js"
+    },
+    "./index": {
+      "import": "./dist/index.js"
+    },
+    "./index.js": {
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./dist/package.json"
   },
   "files": [
-    "docs"
+    "docs",
+    "README.md",
+    "LICENSE",
+    "dist/"
   ],
   "scripts": {
     "test": "libuild test -p node",
-    "corpus": "node scripts/clone-corpus.js",
-    "audit": "node scripts/audit.js",
-    "diff": "node scripts/diff-prettier.js",
     "build": "libuild build",
-    "stage": "libuild stage --provenance",
-    "prepublishOnly": "echo 'ERROR: Cannot publish from root directory. Use npm run stage instead.' && exit 1"
+    "stage": "libuild stage --provenance"
   },
   "keywords": [
     "eslint",
-    "eslintplugin",
-    "eslint-plugin",
     "formatter",
     "line-breaks"
   ],
@@ -45,5 +51,6 @@
     "prettier": "^3.9.4",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.67.0"
-  }
+  },
+  "module": "./dist/index.js"
 }
