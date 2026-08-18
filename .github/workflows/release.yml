@@ -11,10 +11,11 @@ name: Release
 #     npm stage download <stage-id>    # inspect the actual tarball
 #     npm stage approve <stage-id>     # or: npm stage reject <stage-id>
 #
-# Staging requires a package that already exists on the registry, so the very
-# first release cannot come from here — it is a normal `libuild publish` from a
-# laptop, which claims the name. Every release from the second onward is staged
-# by this workflow.
+# The first release cannot come from here. Both `npm trust` and `npm stage`
+# require a package that already exists on the registry, so claiming the name
+# is the single gate that unlocks everything below it — a plain `libuild
+# publish` from a laptop. Every release from the second onward is staged by
+# this workflow.
 #
 # One-time registry setup, run once by a package owner after that first publish:
 #
