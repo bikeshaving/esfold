@@ -3,6 +3,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { createRequire } from 'node:module';
 import { Linter } from 'eslint';
+import type { Linter as LinterTypes } from 'eslint';
 import stylistic from '@stylistic/eslint-plugin';
 import fold from '../src/index.js';
 
@@ -21,14 +22,14 @@ const CORPUS_ROOT = join(
 );
 const MAX_FILES = 15;
 
-const configFor = (indentOptions: unknown[]): any[] => [
+const configFor = (indentOptions: unknown[]): LinterTypes.Config[] => [
   {
     plugins: { fold, '@stylistic': stylistic },
     languageOptions: { ecmaVersion: 'latest', sourceType: 'commonjs' },
     // The corpus is ESLint's own source, whose eslint-disable comments are
     // all "unused" under this config — ESLint's own autofix would strip
     // them, which is noise unrelated to what this test measures.
-    linterOptions: { reportUnusedDisableDirectives: 'off' },
+    linterOptions: { reportUnusedDisableDirectives: 'off' as const },
     rules: {
       // 60, not 80. This corpus is tab-indented and already fits 80, so at
       // 80 Fold makes no edits at all and this test would verify only that
@@ -46,7 +47,12 @@ const configFor = (indentOptions: unknown[]): any[] => [
 
 // The configs where indent inference and enforcement are most likely to
 // diverge: tabs, 4 spaces, and overrides.
-const withRules = (config: any[], rules: Record<string, unknown>): any[] => [{ ...config[0], rules: { ...config[0].rules, ...rules } }];
+const withRules = (
+  config: LinterTypes.Config[],
+  rules: LinterTypes.RulesRecord,
+): LinterTypes.Config[] => [
+  { ...config[0], rules: { ...config[0]!.rules, ...rules } },
+];
 
 const CONFIGS = {
   'two-space': configFor([2, { SwitchCase: 1 }]),

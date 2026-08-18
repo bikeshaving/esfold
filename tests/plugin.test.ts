@@ -2,12 +2,14 @@ import { Linter } from 'eslint';
 import { test, expect } from '@b9g/libuild/test';
 import fold from '../src/index.js';
 
-test('recommended config enables the rule with defaults', () => {
+test('the plugin registers and fixes under a flat config', () => {
   const linter = new Linter();
   const code = `const wide = compute(${'a'.repeat(40)}, ${'b'.repeat(40)});\n`;
-  const result = linter.verifyAndFix(code, [fold.configs.recommended], {
-    filename: 'example.js',
-  });
+  const result = linter.verifyAndFix(
+    code,
+    { plugins: { fold }, rules: { 'fold/breaks': 'error' } },
+    { filename: 'example.js' },
+  );
 
   expect(result.fixed).toBe(true);
   expect(result.output).toBe(
@@ -15,6 +17,7 @@ test('recommended config enables the rule with defaults', () => {
   );
 });
 
-test('the plugin exposes exactly one rule', () => {
+test('the plugin exposes exactly one rule and no presets', () => {
   expect(Object.keys(fold.rules ?? {})).toEqual(['breaks']);
+  expect(fold.configs).toBeUndefined();
 });

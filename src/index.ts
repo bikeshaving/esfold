@@ -1779,11 +1779,10 @@ const breaks: TSESLint.RuleModule<MessageId, Options> = {
   },
 };
 
-interface FoldPlugin extends ESLint.Plugin {
-  configs: { recommended: Linter.Config };
-}
-
-const plugin: FoldPlugin = {
+// No `configs`. One rule is not a set to curate, so a preset would only save
+// registering the plugin — and it could not carry `maxWidth`, which is the
+// reason to configure this at all.
+const plugin: ESLint.Plugin = {
   meta: {
     name: 'eslint-plugin-fold',
     version: '0.1.0',
@@ -1791,15 +1790,6 @@ const plugin: FoldPlugin = {
   // ESLint types rules against ESTree; this one is typed against TSESTree so
   // it can walk TypeScript nodes. The shapes are identical at runtime.
   rules: { breaks: breaks as unknown as Rule.RuleModule },
-  // Filled in below.
-  configs: {} as FoldPlugin['configs'],
-};
-
-// Self-referential, so the config is attached after the plugin exists.
-plugin.configs.recommended = {
-  name: 'fold/recommended',
-  plugins: { fold: plugin },
-  rules: { 'fold/breaks': 'error' },
 };
 
 export default plugin;
