@@ -20,6 +20,7 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci
+      - run: npm run typecheck
       - run: npm test
       # The published artifact is built, not the source tree, so a build
       # failure has to fail here rather than at publish time.
@@ -54,9 +55,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
       - run: npm ci
-      - run: npm run corpus
-      - run: npm run audit
-      - run: npm run diff
+      # These import src/index.ts directly, so the runtime must strip types.
+      - run: node scripts/clone-corpus.js
+      - run: node scripts/audit.js
+      - run: node scripts/diff-prettier.js

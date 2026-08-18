@@ -14,9 +14,11 @@
   "type": "module",
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
     "./index": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     },
     "./index.js": {
@@ -25,7 +27,6 @@
     "./package.json": "./dist/package.json"
   },
   "files": [
-    "docs",
     "README.md",
     "LICENSE",
     "dist/"
@@ -33,7 +34,9 @@
   "scripts": {
     "test": "libuild test -p node",
     "build": "libuild build",
-    "stage": "libuild stage --provenance"
+    "typecheck": "tsc --noEmit",
+    "stage": "libuild stage --provenance",
+    "prepublishOnly": "echo 'ERROR: Cannot publish from root directory. Use libuild publish instead.' && exit 1"
   },
   "keywords": [
     "eslint",
@@ -47,10 +50,14 @@
   "devDependencies": {
     "@b9g/libuild": "^0.2.20",
     "@stylistic/eslint-plugin": "^5.10.0",
+    "@types/node": "^26.2.0",
+    "@typescript-eslint/types": "^8.67.0",
+    "@typescript-eslint/utils": "^8.67.0",
     "eslint": "^10.8.1",
     "prettier": "^3.9.4",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.67.0"
   },
-  "module": "./dist/index.js"
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts"
 }

@@ -7,22 +7,19 @@
  * needed real code to trigger. Run it after any change to the break
  * candidates or the addition pass.
  *
- *   npm run corpus     # once
- *   npm run audit
+ *   node scripts/clone-corpus.js   # once
+ *   node scripts/audit.js
  *
- * Per file it checks: format() does not throw, the AST is unchanged, the
+ * Per file it checks: the rule does not throw, the AST is unchanged, the
  * result is idempotent, and no over-width line is left holding a break Fold
  * could have taken. Each repository is measured at *its own* print width, so
  * "touched" means real disagreement rather than a width mismatch.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { SourceCode } from 'eslint';
+import { Linter } from 'eslint';
 import tseslint from 'typescript-eslint';
-import { format, applyEdits } from '../src/index.js';
-import { collectGroups } from '../src/index.js';
-import { isForbiddenBreak } from '../src/index.js';
-import { measureLine } from '../src/index.js';
+import fold from '../src/index.ts';
 import {
   CORPUS, PARSE_OPTIONS, printWidth, requireCorpus, sample, sourceFiles,
   stripLocations,
@@ -38,93 +35,34 @@ const parse = (code) => {
   }
 };
 
+const linter = new Linter();
+
+const configFor = (maxWidth) => ({
+  plugins: { fold },
+  linterOptions: { reportUnusedDisableDirectives: 'off' },
+  rules: { 'fold/breaks': ['error', { maxWidth }] },
+  languageOptions: {
+    parser: tseslint.parser,
+    ecmaVersion: 'latest',
+    sourceType: 'module',
+    parserOptions: { ecmaFeatures: { jsx: true } },
+  },
+});
+
+const run = (code, maxWidth) => linter.verifyAndFix(code, configFor(maxWidth));
+
 /**
- * Over-width lines that still hold a break Fold could have taken — §8's
- * test 4. Three kinds of line are legitimately left long and are excluded:
- * ones with no candidate at all, ones pushed over only by a trailing
- * comment (§7.1), and ones whose sole item is atomic and already too wide,
- * where breaking cannot help.
+ * Over-width lines that still hold a break Fold could have taken. The rule
+ * reports a long line only when it has a legal break position, so anything it
+ * still reports about its own output is a break that was available and not
+ * taken. Lines with no candidate at all, or whose only item is atomic and
+ * already too wide, report nothing and are correctly ignored.
  */
 function stuckLines(code, maxWidth) {
-  const ast = parse(code);
-  if (!ast) return [];
-  const sourceCode = new SourceCode({ text: code, ast });
-  const { candidates } = collectGroups(sourceCode, 'after');
-  const LINE_BREAK = /\r\n|[\n\r\u2028\u2029]/;
-  const broken = (range) =>
-    range && LINE_BREAK.test(code.slice(range.start, range.end));
-  const usable = (group, gap) =>
-    group.addable !== false && !isForbiddenBreak(sourceCode, gap);
-
-  const hasUsableGapInside = (group, [from, to]) =>
-    candidates.some((other) =>
-      other.gaps.some(
-        (gap) =>
-          !group.gaps.includes(gap) &&
-          from <= gap.start &&
-          gap.end <= to &&
-          usable(other, gap),
-      ),
-    );
-  // Measured at the indent the item would actually land on — the line's own
-  // indent plus one step. Assuming a fixed two spaces here reads as "it
-  // would fit" for anything nested, which is how this check used to
-  // disagree with the rule itself.
-  const pointless = (group, indent) =>
-    group.items?.length === 1 &&
-    group.items[0]?.range &&
-    !hasUsableGapInside(group, group.items[0].range) &&
-    measureLine(indent + '  ' + code.slice(...group.items[0].range)) > maxWidth;
-
-
-  // A fallback gap (§3.3 #16) is only a usable candidate when both halves of
-  // the break fit; otherwise the rule declines it and so must this check.
-  const fallbackHelps = (gap, lineStart, lineEnd, indent) => {
-    const head = code.slice(lineStart, gap.start).trimEnd();
-    const tail = code.slice(gap.end, lineEnd);
-    return (
-      measureLine(head) <= maxWidth &&
-      measureLine(indent + '  ' + tail) <= maxWidth
-    );
-  };
-
-  const gapsFor = (indent, lineStart, lineEnd) =>
-    candidates
-      .filter((group) => group.addable !== false && !pointless(group, indent))
-      .flatMap((group) =>
-        group.gaps.map((gap) => ({ gap, fallback: group.fallback === true })),
-      )
-      .filter(({ gap }) => !broken(gap) && !broken(gap.alt))
-      .filter(({ gap }) => !isForbiddenBreak(sourceCode, gap))
-      .filter(
-        ({ gap, fallback }) =>
-          !fallback || fallbackHelps(gap, lineStart, lineEnd, indent),
-      )
-      .map(({ gap }) => gap);
-
-  const comments = sourceCode.getAllComments();
-  const trailingComment = (start, end) =>
-    comments.some(
-      (c) =>
-        c.range[0] >= start &&
-        c.range[0] < end &&
-        c.range[1] >= end &&
-        measureLine(code.slice(start, c.range[0]).trimEnd()) <= maxWidth,
-    );
-
-  const out = [];
-  let position = 0;
-  for (const line of code.split('\n')) {
-    const start = position;
-    const end = position + line.length;
-    position = end + 1;
-    if (measureLine(line) <= maxWidth) continue;
-    if (trailingComment(start, end)) continue;
-    const gaps = gapsFor(/^[ \t]*/.exec(line)[0], start, end);
-    if (gaps.some((gap) => start <= gap.start && gap.end <= end))
-      out.push(line.trim().slice(0, 70));
-  }
-  return out;
+  return linter
+    .verify(code, configFor(maxWidth))
+    .filter((message) => message.ruleId === 'fold/breaks')
+    .map((message) => `line ${message.line}: ${message.messageId}`);
 }
 
 const totals = { files: 0, changed: 0, crash: 0, ast: 0, idem: 0, stuck: 0, lines: 0, edits: 0 };
@@ -150,17 +88,19 @@ for (const repo of requireCorpus()) {
     n++;
     lines += code.split('\n').length;
 
-    let out, editList;
+    let out;
     try {
-      editList = format(new SourceCode({ text: code, ast }), { maxWidth: width });
-      out = applyEdits(code, editList);
+      for (const message of linter.verify(code, configFor(width))) {
+        if (message.ruleId !== 'fold/breaks') continue;
+        edits++;
+        kinds[message.messageId] = (kinds[message.messageId] ?? 0) + 1;
+      }
+      out = run(code, width).output;
     } catch (error) {
       crash++;
       if (notes.length < 2) notes.push(`CRASH ${file.slice(dir.length + 1)}: ${error.message}`);
       continue;
     }
-    edits += editList.length;
-    for (const edit of editList) kinds[edit.messageId] = (kinds[edit.messageId] ?? 0) + 1;
     if (out !== code) changed++;
 
     const after = parse(out);
@@ -170,11 +110,7 @@ for (const repo of requireCorpus()) {
       continue;
     }
     try {
-      const reparsed = parse(out);
-      const twice = applyEdits(
-        out,
-        format(new SourceCode({ text: out, ast: reparsed }), { maxWidth: width }),
-      );
+      const twice = run(out, width).output;
       if (twice !== out) {
         idem++;
         if (notes.length < 2) notes.push(`NOT IDEMPOTENT ${file.slice(dir.length + 1)}`);

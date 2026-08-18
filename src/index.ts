@@ -1,43 +1,82 @@
-/**
- * eslint-plugin-fold — `fold/breaks`, the rule that decides where the
- * newlines go. See docs/design.md; the § references throughout point at it.
- *
- * No ESLint imports (§2.4) — `sourceCode` is consumed structurally, so the
- * core is testable without spinning up a linter.
- */
+import type { Rule, Linter, ESLint } from 'eslint';
+import type { TSESTree } from '@typescript-eslint/types';
+import type { TSESLint } from '@typescript-eslint/utils';
 
-// ===============
-// = Measurement =
-// ===============
+type Node = TSESTree.Node;
+type Token = TSESTree.Token;
+type Comment = TSESTree.Comment;
+type Position = TSESTree.Position;
+type Range = [number, number];
 
-/**
- * Line-width measurement (§7.1).
- *
- * A tab advances to the next 2-column tab stop. 2 matches Prettier's default
- * `tabWidth`, which is what tab-indented codebases are overwhelmingly
- * formatted against; scoring a tab as 4 made Fold reflow deeply-indented
- * lines those projects already considered fine. `@stylistic/max-len` defaults
- * to 4 instead, so a project running both should set `max-len`'s `tabWidth`
- * to 2 to keep them agreeing. Not configurable.
- */
-export const TAB_WIDTH = 2;
+interface TokenOptions {
+  includeComments?: boolean;
+  filter?: (token: Token) => boolean;
+}
 
-/**
- * Visual width of a line of text.
- *
- * This deliberately reproduces `@stylistic/max-len`'s `computeLineLength`
- * rather than being independently "correct": the goal is that the two rules
- * never disagree about which lines are too long, and disagreement is worse
- * than a shared quirk. The quirk is that the total counts *code points*
- * while each tab stop is computed from the *UTF-16* offset, so a line
- * holding both an astral character (emoji, rare CJK) and a tab measures
- * differently than either convention alone would suggest.
- *
- * Consequences shared with max-len: a full-width CJK character or an emoji
- * counts as one column though it occupies two, and a decomposed accent
- * counts as two though it renders as one.
- */
-export function measureLine(text) {
+type Source = TSESLint.SourceCode;
+
+/** Whitespace between two tokens, and what a collapsed break becomes there. */
+interface Gap {
+  start: number;
+  end: number;
+  kind: 'item' | 'close' | 'same';
+  join?: string;
+  // Operator gaps carry the other side here: a newline on either side counts.
+  alt?: { start: number; end: number };
+}
+
+type GroupKind =
+  | 'chain'
+  | 'arrow'
+  | 'params'
+  | 'operator'
+  | 'ternary'
+  // Set for description only; nothing branches on these.
+  | 'assign'
+  | 'condition';
+
+/** A set of gaps that break together, all or none. */
+interface Group {
+  node: Node;
+  gaps: Gap[];
+  kind?: GroupKind;
+  items?: (Node | null)[];
+  range?: Range;
+  // Excluded from the addition pass, but still completed for consistency.
+  addable?: boolean;
+  complete?: boolean;
+  // Consulted only when a line has no other candidate.
+  fallback?: boolean;
+  flat?: boolean;
+  hug?: Range;
+  // Broken unconditionally rather than only when the line is too long.
+  necessary?: boolean;
+}
+
+type MessageId = 'overWidth' | 'necessaryBreak' | 'inconsistentGroup';
+
+interface Edit {
+  range: Range;
+  text: string;
+  loc: { start: Position; end: Position };
+  messageId: MessageId;
+  data?: Record<string, string>;
+}
+
+/** A source range plus the indent it will carry once edits apply. */
+interface VLine {
+  indent: string;
+  start: number;
+  end: number;
+}
+
+type OperatorSide = 'before' | 'after';
+
+// Mirrors @stylistic/max-len's computeLineLength, quirks included; the two
+// disagreeing is worse. 2, not 4 — at 4 Fold reflowed tab-indented files.
+const TAB_WIDTH = 2;
+
+function measureLine(text: string): number {
   let extra = 0;
   for (let i = 0; i < text.length; i++) {
     if (text[i] !== '\t') continue;
@@ -48,28 +87,16 @@ export function measureLine(text) {
   return codePoints + extra;
 }
 
-// ====================
-// = Indent inference =
-// ====================
-
-/**
- * Indent inference (§7). The indent unit is read from the file, never
- * configured: the most common leading-whitespace delta between
- * consecutively-nested lines. Falls back to two spaces for a file with no
- * nesting. Tab files naturally infer '\t' because that's the dominant delta.
- */
-export function inferIndentUnit(lines) {
+function inferIndentUnit(lines: string[]): string {
   const counts = new Map();
   let prev = null;
   for (const line of lines) {
     if (line.trim() === '') continue;
-    const ws = /^[ \t]*/.exec(line)[0];
+    const ws = /^[ \t]*/.exec(line)![0];
     if (prev !== null && ws.length > prev.length && ws.startsWith(prev)) {
       const delta = ws.slice(prev.length);
-      // Only homogeneous deltas are usable as a unit. A mixed one like
-      // '\t ' comes from continuation-line alignment, not from a nesting
-      // step, and repeating it would emit exactly the tab/space mixture
-      // `no-mixed-spaces-and-tabs` exists to flag.
+      // Mixed deltas like '\t ' come from continuation alignment, not a
+      // nesting step; repeating one emits the tab/space mixture linters flag.
       if (delta === '\t'.repeat(delta.length) || delta === ' '.repeat(delta.length)) {
         counts.set(delta, (counts.get(delta) ?? 0) + 1);
       }
@@ -87,17 +114,6 @@ export function inferIndentUnit(lines) {
   return best ?? '  ';
 }
 
-// ===========================
-// = Forbidden breaks (§3.2) =
-// ===========================
-
-/**
- * Forbidden breaks (§3.2). A gap is forbidden when inserting a newline there
- * would be an ASI hazard or would split a semantic unit. Candidate
- * construction already avoids most of these by design; this table is the
- * backstop every gap passes through before a break is inserted.
- */
-
 const KEYWORD_NO_BREAK_AFTER = new Set([
   'return',
   'throw',
@@ -111,7 +127,7 @@ const KEYWORD_NO_BREAK_AFTER = new Set([
 
 const ALWAYS_UNARY = new Set(['!', '~', 'typeof', 'void', 'delete', 'await']);
 
-function looksLikeOperandEnd(token) {
+function looksLikeOperandEnd(token: Token | null): boolean {
   if (!token) return false;
   if (token.type === 'Identifier' || token.type === 'PrivateIdentifier')
     return true;
@@ -131,17 +147,14 @@ function looksLikeOperandEnd(token) {
   return false;
 }
 
-export function isForbiddenBreak(sourceCode, gap) {
+function isForbiddenBreak(sourceCode: Source, gap: Gap): boolean {
   const boundary = sourceCode.getTokenByRangeStart(gap.end, {
     includeComments: true,
   });
   if (!boundary) return true;
 
-  // Comments do not participate in ASI, so the hazard is decided by the
-  // nearest *code* tokens on either side. Resolving these with comments
-  // included lets `return /* c */ <break> value` through — the token before
-  // the gap is the comment rather than `return`, and the break quietly turns
-  // the statement into `return undefined`.
+  // Comments take no part in ASI, so look past them. Including them lets
+  // `return /* c */ <break> value` through, silently returning undefined.
   const prev = sourceCode.getTokenBefore(boundary, { includeComments: false });
   const next =
     boundary.type === 'Line' || boundary.type === 'Block'
@@ -156,9 +169,8 @@ export function isForbiddenBreak(sourceCode, gap) {
   // Semantic units: after async / function / new.
   if (prev.type === 'Keyword' && KEYWORD_NO_BREAK_AFTER.has(prev.value))
     return true;
-  // Token *type* is unreliable for the contextual keywords: espree reports
-  // `yield` as a Keyword but `await` as an Identifier, and `async` is always
-  // an Identifier. Match on value.
+  // Token type is unreliable here: espree calls `yield` a Keyword but `await`
+  // and `async` Identifiers. Match on value.
   if (
     prev.value === 'yield' ||
     prev.value === 'async' ||
@@ -208,51 +220,22 @@ export function isForbiddenBreak(sourceCode, gap) {
   return false;
 }
 
-// =====================================
-// = Break candidates (§3.1, §3.3, §4) =
-// =====================================
-
-/**
- * Break candidates. Two shapes so far:
- *
- * - Bracketed item lists (§3.3 categories 1–3): call arguments, array
- *   elements, object properties. Gaps: after the open bracket ('item'),
- *   after each separating comma ('item'), before the close bracket
- *   ('close'). 'item' gaps indent one unit past the base; 'close' gaps
- *   return to the base.
- *
- * - Operator chains (§3.3 category 4, §4.2): binary/logical runs of equal
- *   precedence, plus assignment chains. Gaps: before each operator, all
- *   'item'. A chain candidate exists only at the root of its precedence run,
- *   so lower precedence (the outermost node) breaks first, and a
- *   higher-precedence subchain breaks only via recursion when a line is
- *   still too long — §4.2's "one precedence level at a time" falls out of
- *   outermost-first.
- *
- * Gaps run from the end of the previous token-or-comment to the start of the
- * next token-or-comment, so a gap is always pure whitespace. A gap containing
- * a newline is already broken; breaking a group only fills in its unbroken
- * gaps (all-or-nothing, §4.3).
- */
-
-/** Generic parser-agnostic AST walk: recurse into anything node-shaped. */
-export function walk(node, visit) {
+function walk(node: Node, visit: (node: Node) => void): void {
   visit(node);
   for (const key of Object.keys(node)) {
     if (key === 'parent') continue;
-    const value = node[key];
+    const value = (node as unknown as Record<string, unknown>)[key];
+    const isNode = (v: unknown): v is Node =>
+      !!v && typeof (v as Node).type === 'string';
     if (Array.isArray(value)) {
-      for (const item of value) {
-        if (item && typeof item.type === 'string') walk(item, visit);
-      }
-    } else if (value && typeof value.type === 'string') {
+      for (const item of value) if (isNode(item)) walk(item, visit);
+    } else if (isNode(value)) {
       walk(value, visit);
     }
   }
 }
 
-// The real ECMAScript precedence table (§4.2), assignment through
-// exponentiation. Lower binds looser and breaks earlier.
+// The real ECMAScript precedence table. Lower binds looser and breaks first.
 const BINARY_PRECEDENCE = {
   '??': 4,
   '||': 4,
@@ -281,73 +264,70 @@ const BINARY_PRECEDENCE = {
   '**': 14,
 };
 
-// `join` is the text a collapsed break becomes (§5): '' for bracket and dot
-// gaps, ' ' for comma and operator gaps. Necessary gaps are never collapsed
-// and carry no join.
-function gapAfter(sourceCode, tokenOrNode, join = '') {
+// `join` is what a collapsed break becomes: '' for bracket and dot gaps, ' '
+// for comma and operator gaps. Necessary gaps carry none.
+function gapAfter(sourceCode: Source, tokenOrNode: Node | Token, join = ''): Gap {
   const next = sourceCode.getTokenAfter(tokenOrNode, { includeComments: true });
-  return { start: tokenOrNode.range[1], end: next.range[0], kind: 'item', join };
+  return { start: tokenOrNode.range[1], end: next!.range[0], kind: 'item', join };
 }
 
-function gapBefore(sourceCode, token, kind, join = '') {
+function gapBefore(
+  sourceCode: Source,
+  token: Node | Token,
+  kind: Gap['kind'],
+  join = '',
+): Gap {
   const prev = sourceCode.getTokenBefore(token, { includeComments: true });
-  return { start: prev.range[1], end: token.range[0], kind, join };
+  return { start: prev!.range[1], end: token.range[0], kind, join };
 }
 
-function isPunct(token, value) {
-  return token && token.type === 'Punctuator' && token.value === value;
+// Narrows to the punctuator subtype, not to Token: "not this punctuator" must
+// leave an ordinary token still typed as a token.
+function isPunct(
+  token: Token | null | undefined,
+  value: string,
+): token is TSESTree.PunctuatorToken {
+  return !!token && token.type === 'Punctuator' && token.value === value;
 }
 
-/**
- * Build the gap list for a bracketed item list. Returns null when the group
- * can't be treated uniformly (empty list, sparse array elision).
- */
-function listGaps(sourceCode, open, close, items, separators = [',']) {
+function listGaps(
+  sourceCode: Source,
+  open: Token,
+  close: Token,
+  items: (Node | null)[],
+  separators: string[] = [','],
+): Gap[] | null {
   if (items.length === 0) return null;
   if (items.some((item) => item == null)) return null; // sparse array
-  const isSeparator = (t) => separators.some((value) => isPunct(t, value));
-  const gaps = [gapAfter(sourceCode, open)];
+  const isSeparator = (t: Token) => separators.some((value) => isPunct(t, value));
+  const gaps: Gap[] = [gapAfter(sourceCode, open)];
   for (let i = 0; i < items.length - 1; i++) {
-    // Where the break goes depends on how the parser drew the item:
-    //
-    //   foo(a, b)            item excludes the comma  -> break after it
-    //   foo((a), b)          item excludes its parens -> skip the `)` too
-    //   { a: X; b: Y }       item *includes* its `;`  -> break after the item
-    //
-    // The third is TypeScript: a TSPropertySignature's range covers its own
-    // separator, so the next separator found belongs to the following
-    // member. Landing on that one would put the break inside it.
-    const separator = sourceCode.getTokenAfter(items[i], {
+    // A TSPropertySignature's range covers its own `;`, so the next separator
+    // found belongs to the following member and breaking there lands inside it.
+    const separator = sourceCode.getTokenAfter(items[i]!, {
       filter: isSeparator,
     });
     const comma =
-      separator && separator.range[0] < items[i + 1].range[0]
+      separator && separator.range[0] < items[i + 1]!.range[0]
         ? separator
-        : items[i];
-    if (comma.range[0] >= close.range[0]) return null;
-    // Breaks insert after the comma, but a comma-first layout
-    // (@stylistic/comma-style "first") counts as broken too: the newline may
-    // sit on either side of the comma, and collapse joins whichever side
-    // holds it (leading side joins to '', no space before the comma).
+        : items[i]!;
+    if (comma!.range[0] >= close.range[0]) return null;
+    // Comma-first layouts count as broken too: the newline may sit on either
+    // side of the comma.
     if (comma === items[i]) {
-      gaps.push(gapAfter(sourceCode, comma, ' '));
+      gaps.push(gapAfter(sourceCode, comma!, ' '));
     } else {
-      const beforeComma = sourceCode.getTokenBefore(comma, {
+      const beforeComma = sourceCode.getTokenBefore(comma!, {
         includeComments: true,
       });
       gaps.push({
-        ...gapAfter(sourceCode, comma, ' '),
-        alt: { start: beforeComma.range[1], end: comma.range[0] },
-        altJoin: '',
+        ...gapAfter(sourceCode, comma!, ' '),
+        alt: { start: beforeComma!.range[1], end: comma!.range[0] },
       });
     }
   }
-  // The close gap is normally between the last token and the bracket — but
-  // a dangling comma can sit on either side of that break: comma-last puts
-  // it before the newline (`b: 2,\n}`), comma-first after it (`\n,}`). Treat
-  // the position before the dangling comma as the alt side, so a
-  // comma-first layout reads as already broken instead of the two rules
-  // pushing the same comma back and forth forever.
+  // A dangling comma sits on either side of the close break (`b: 2,\n}` or
+  // `\n,}`); the alt side stops Fold and comma-style trading it forever.
   const closeGap = gapBefore(sourceCode, close, 'close');
   const dangling = sourceCode.getTokenBefore(close, { includeComments: true });
   if (dangling && isSeparator(dangling)) {
@@ -355,10 +335,9 @@ function listGaps(sourceCode, open, close, items, separators = [',']) {
       includeComments: true,
     });
     closeGap.alt = {
-      start: beforeDangling.range[1],
+      start: beforeDangling!.range[1],
       end: dangling.range[0],
     };
-    closeGap.altJoin = '';
   }
   gaps.push(closeGap);
   return gaps;
@@ -383,13 +362,12 @@ const ARROW_BREAK_BODIES = new Set([
   'ArrowFunctionExpression',
 ]);
 
-function isHuggable(node) {
+function isHuggable(node: Node): boolean {
   if (
     node.type === 'ObjectExpression' ||
     node.type === 'ArrayExpression' ||
-    // The pattern equivalents, for parameter lists (§3.3 #6 "as call
-    // arguments" — a lone destructured parameter hugs like an options
-    // object).
+    // The pattern equivalents, for parameter lists: a lone destructured
+    // parameter hugs like an options object.
     node.type === 'ObjectPattern' ||
     node.type === 'ArrayPattern'
   ) {
@@ -399,18 +377,8 @@ function isHuggable(node) {
     node.type === 'FunctionExpression' ||
     node.type === 'ArrowFunctionExpression'
   ) {
-    // §4.5 hugs an argument "with its own internal structure", which is what
-    // absorbs the break. Two shapes qualify, and they absorb it differently:
-    // a bracketed body keeps its opening bracket on the call line, while the
-    // bodies in ARROW_BREAK_BODIES take a break after the `=>` instead
-    // (§3.3 #15). Bodies in neither set — a member path, an arithmetic
-    // expression, an assignment — have nowhere to put a break, so the call
-    // itself breaks and the arrow rides along on one line.
-    //
-    // This test is structural on purpose. Keying it on whether the argument
-    // currently spans several lines would feed back on itself: breaking
-    // inside the body makes it multiline, which flips the decision on the
-    // next pass, and the call explodes and re-hugs forever.
+    // Structural on purpose: keying this on whether the argument is currently
+    // multiline feeds back on itself and the call explodes and re-hugs forever.
     return (
       BRACKET_HUG_BODIES.has(node.body.type) ||
       (node.type === 'ArrowFunctionExpression' &&
@@ -420,15 +388,9 @@ function isHuggable(node) {
   return false;
 }
 
-/**
- * The break after an arrow's `=>` (§3.3 #15). It exists only for bodies that
- * can use the line it opens: a call or ternary that will break further, a
- * JSX element, a template, or another arrow in a chain. For a member path or
- * a binary expression there is nothing to gain — the body would sit alone on
- * the new line at the same width — so those let the enclosing call break
- * instead.
- */
-function arrowBodyGroup(sourceCode, node) {
+// The break after an arrow's `=>`, for bodies that can use the line it opens.
+// A member path gains nothing there, so it lets the call break instead.
+function arrowBodyGroup(sourceCode: Source, node: TSESTree.FunctionLike): Group | null {
   if (node.type !== 'ArrowFunctionExpression') return null;
   if (!ARROW_BREAK_BODIES.has(node.body.type)) return null;
   const arrow = sourceCode.getTokenBefore(node.body, {
@@ -442,14 +404,19 @@ function arrowBodyGroup(sourceCode, node) {
   };
 }
 
-function callGroup(sourceCode, node) {
+function callGroup(
+  sourceCode: Source,
+  node: TSESTree.CallExpression | TSESTree.NewExpression,
+): Group | null {
   const args = node.arguments;
   if (!args || args.length === 0) return null;
-  const close = sourceCode.getLastToken(node);
+  const close = sourceCode.getLastToken(node)!;
   if (!isPunct(close, ')')) return null; // `new Foo` without parens
   // The call's open paren is the first `(` after the callee (or its type
   // arguments) — argument-level parens all start after it.
-  const after = node.typeArguments ?? node.typeParameters ?? node.callee;
+  // `typeParameters` is what typescript-eslint called these before v8.
+  const withOldName = node as { typeParameters?: Node };
+  const after = node.typeArguments ?? withOldName.typeParameters ?? node.callee;
   let open = sourceCode.getTokenAfter(after);
   while (open && !isPunct(open, '(')) {
     open = sourceCode.getTokenAfter(open);
@@ -457,26 +424,15 @@ function callGroup(sourceCode, node) {
   if (!open || open.range[0] >= args[0].range[0]) return null;
   const gaps = listGaps(sourceCode, open, close, args);
   if (!gaps) return null;
-  // Hugging (§4.5): with exactly one huggable argument in first or last
-  // position, the call never breaks at the call level — the hug target's own
-  // group absorbs the break instead. The call group stays available to the
-  // removal pass (an author-broken un-hugged form still collapses), with the
-  // hug target's interior exempted from the inlining requirement.
-  // A call whose last argument is a function keeps whatever layout the
-  // author gave it. The hugged form leaves the open paren unbroken and the
-  // close paren on its own line —
-  //
-  //   promise.then(() =>
-  //     compute(value),
-  //   );
-  //
-  // which reads as "partially broken" to the consistency pass, though it is
-  // a deliberate and very common shape rather than an untidy list.
+  // A trailing function argument keeps the author's layout: the hugged form
+  // reads as partially broken though it is deliberate.
   const last = args[args.length - 1];
   const trailingFunction =
     last.type === 'FunctionExpression' ||
     last.type === 'ArrowFunctionExpression';
 
+  // With exactly one huggable argument first or last, the call never breaks at
+  // the call level — the hug target's own group absorbs the break.
   const huggable = args.filter(isHuggable);
   if (
     huggable.length === 1 &&
@@ -487,50 +443,52 @@ function callGroup(sourceCode, node) {
   return { node, gaps, items: args, complete: !trailingFunction };
 }
 
-function bracketGroup(sourceCode, node, items, openValue, closeValue) {
-  const open = sourceCode.getFirstToken(node);
+function bracketGroup(
+  sourceCode: Source,
+  node: Node,
+  items: (Node | null)[],
+  openValue: string,
+  closeValue: string,
+): Group | null {
+  const open = sourceCode.getFirstToken(node)!;
   if (!isPunct(open, openValue)) return null;
   if (items.length === 0 || items.some((item) => item == null)) return null;
-  // Derived from the last item, not from the node: a TypeScript pattern
-  // carries its type annotation inside its own range, so `{a, b}: {c: D}`
-  // ends at the *annotation's* brace. Taking the node's last token would
-  // put the closing break inside the annotation.
-  const close = sourceCode.getTokenAfter(items[items.length - 1], {
+  // From the last item, not the node: a TS pattern's range covers its type
+  // annotation, so `{a, b}: {c: D}` would put the closing break inside it.
+  const close = sourceCode.getTokenAfter(items[items.length - 1]!, {
     filter: (t) => isPunct(t, closeValue),
   });
   if (!close) return null;
   const gaps = listGaps(sourceCode, open, close, items);
-  return gaps && { node, range: [open.range[0], close.range[1]], gaps, items };
+  return (
+    gaps && {
+      node,
+      range: [open.range[0], close.range[1]] as Range,
+      gaps,
+      items,
+    }
+  );
 }
 
-/**
- * Necessary breaks (§3.1): block bodies, class bodies, switch cases, and
- * statement boundaries are always broken, even when the result would fit.
- * Gap kinds: 'item' indents one unit past the group's base line, 'close'
- * returns to it, 'same' keeps the indentation of the line being split
- * (statement boundaries — the new line sits at its sibling's depth).
- */
-function statementListGaps(sourceCode, statements) {
-  const gaps = [];
+function statementListGaps(sourceCode: Source, statements: Node[]): Gap[] {
+  const gaps: Gap[] = [];
   for (let i = 1; i < statements.length; i++) {
     const first = sourceCode.getFirstToken(statements[i]);
-    // A leading `;` guards ASI in semicolon-less code — `;(node).x = 1` —
-    // and belongs to the line of the statement it guards, even though the
-    // parser attaches it to the previous one. Breaking at this boundary
-    // would strand it on a line of its own and destroy the idiom.
-    const prev = sourceCode.getTokenBefore(first);
+    const prev = sourceCode.getTokenBefore(first!);
+    // A leading `;` guards ASI in semicolon-less code — `;(node).x = 1`. The
+    // parser attaches it to the previous statement; breaking here strands it.
     if (prev && isPunct(prev, ';')) {
       const beforeSemi = sourceCode.getTokenBefore(prev);
       if (!beforeSemi || beforeSemi.loc.end.line < prev.loc.start.line) continue;
     }
-    gaps.push(gapBefore(sourceCode, first, 'same'));
+    gaps.push(gapBefore(sourceCode, first!, 'same'));
   }
   return gaps;
 }
 
-function blockGaps(sourceCode, node, body) {
-  const open = sourceCode.getFirstToken(node);
-  const close = sourceCode.getLastToken(node);
+function blockGaps(sourceCode: Source, node: Node, body: Node[]): Gap[] | null {
+  const open = sourceCode.getFirstToken(node)!;
+  const close = sourceCode.getLastToken(node)!;
   if (!isPunct(open, '{') || !isPunct(close, '}')) return null;
   if (body.length === 0) return null;
   return [
@@ -540,7 +498,7 @@ function blockGaps(sourceCode, node, body) {
   ];
 }
 
-function necessaryGroup(sourceCode, node) {
+function necessaryGroup(sourceCode: Source, node: Node): Group | null {
   switch (node.type) {
     case 'BlockStatement':
     case 'StaticBlock': {
@@ -553,9 +511,9 @@ function necessaryGroup(sourceCode, node) {
     }
     case 'SwitchStatement': {
       if (node.cases.length === 0) return null;
-      const close = sourceCode.getLastToken(node);
+      const close = sourceCode.getLastToken(node)!;
       const open = sourceCode.getTokenBefore(
-        sourceCode.getFirstToken(node.cases[0]),
+        sourceCode.getFirstToken(node.cases[0])!,
         { filter: (t) => isPunct(t, '{') },
       );
       if (!open || !isPunct(close, '}')) return null;
@@ -570,9 +528,7 @@ function necessaryGroup(sourceCode, node) {
     }
     case 'SwitchCase': {
       if (node.consequent.length === 0) return null;
-      // `case X: {` keeps its brace on the case line, the same way a
-      // function body keeps `{` on the signature line — the block's own
-      // necessary breaks already supply the structure.
+      // `case X: {` keeps its brace on the case line
       const braced =
         node.consequent.length === 1 &&
         node.consequent[0].type === 'BlockStatement';
@@ -584,7 +540,7 @@ function necessaryGroup(sourceCode, node) {
             : [
                 gapBefore(
                   sourceCode,
-                  sourceCode.getFirstToken(node.consequent[0]),
+                  sourceCode.getFirstToken(node.consequent[0])!,
                   'item',
                 ),
               ]),
@@ -600,7 +556,7 @@ function necessaryGroup(sourceCode, node) {
   return null;
 }
 
-function isBlockBodyFunction(node) {
+function isBlockBodyFunction(node: Node): boolean {
   return (
     (node.type === 'FunctionExpression' ||
       node.type === 'ArrowFunctionExpression') &&
@@ -608,15 +564,11 @@ function isBlockBodyFunction(node) {
   );
 }
 
-/**
- * Method-chain candidate (§3.3 #5, §4.4): break before every dot on the
- * callee/object spine. Only a real chain qualifies — at least two
- * method-call links — and a chain whose calls take a block-bodied function
- * argument is never broken at the chain level (§4.4): the necessary breaks
- * inside those blocks already provide the structure. The whole spine is
- * absorbed either way so sub-chains don't break independently.
- */
-function methodChainGroup(sourceCode, node, absorbed) {
+function methodChainGroup(
+  sourceCode: Source,
+  node: Node,
+  absorbed: Set<Node>,
+): Group | null {
   const dots = [];
   let callLinks = 0;
   let hasBlockBody = false;
@@ -630,9 +582,8 @@ function methodChainGroup(sourceCode, node, absorbed) {
       if (current.arguments.some(isBlockBodyFunction)) hasBlockBody = true;
       absorbed.add(current);
       fromCall = current.type === 'CallExpression';
-      // A parenthesized head is one unit: `(a.b.c).d().e()` breaks at .d
-      // and .e, never at the dots inside the parens, which sit at a
-      // different bracket depth than the rest of the chain.
+      // A parenthesized head is one unit: `(a.b.c).d().e()` breaks at .d and
+      // .e, never at the dots inside the parens.
       if (isParenthesized(sourceCode, current.callee)) break;
       current = current.callee;
     } else if (current.type === 'MemberExpression') {
@@ -654,47 +605,39 @@ function methodChainGroup(sourceCode, node, absorbed) {
     }
   }
   if (callLinks < 2 || hasBlockBody) return null;
-  // Breaks insert before the dot (§3.2), but a trailing-dot layout
-  // (@stylistic/dot-location "object") counts as broken too.
-  const gaps = dots
+  const gaps: Gap[] = dots
     .map((dot) => {
       const next = sourceCode.getTokenAfter(dot, { includeComments: true });
       return {
         ...gapBefore(sourceCode, dot, 'item'),
-        alt: { start: dot.range[1], end: next.range[0] },
-        altJoin: '',
+        alt: { start: dot.range[1], end: next!.range[0] },
       };
     })
     .sort((a, b) => a.start - b.start);
   return { node, gaps, kind: 'chain' };
 }
 
-/**
- * Remaining optional-break categories (§3.3 #6–13). Each group may carry an
- * explicit `range` (defaulting to node.range in the consumer): for paren
- * spans it keeps the removal pass from freezing a condition because of
- * comments or blocks in the statement body.
- */
-
-/** #6: function/arrow parameters, as call arguments — hugging included. */
-function paramsGroup(sourceCode, node) {
+function paramsGroup(
+  sourceCode: Source,
+  node: TSESTree.FunctionLike | TSESTree.TSFunctionType | TSESTree.TSConstructorType,
+): Group | null {
   const params = node.params;
   if (!params || params.length === 0) return null;
-  const anchor = node.typeParameters ?? node.id ?? null;
-  let open = anchor
+  const anchor = node.typeParameters ?? ('id' in node ? node.id : null) ?? null;
+  let open: Token | null = anchor
     ? sourceCode.getTokenAfter(anchor)
     : sourceCode.getFirstToken(node);
-  while (open && !isPunct(open, '(') && open.range[0] < params[0].range[0]) {
-    open = sourceCode.getTokenAfter(open);
+  while (open && !isPunct(open, '(') && open.range[0] < params[0]!.range[0]) {
+    open = sourceCode.getTokenAfter(open as Token);
   }
-  if (!isPunct(open, '(') || open.range[0] >= params[0].range[0]) return null;
-  const close = sourceCode.getTokenAfter(params[params.length - 1], {
+  if (!isPunct(open, '(') || open.range[0] >= params[0]!.range[0]) return null;
+  const close = sourceCode.getTokenAfter(params[params.length - 1]!, {
     filter: (t) => isPunct(t, ')'),
   });
   if (!close) return null;
   const gaps = listGaps(sourceCode, open, close, params);
   if (!gaps) return null;
-  const range = [open.range[0], close.range[1]];
+  const range: Range = [open.range[0], close.range[1]];
   const huggable = params.filter(isHuggable);
   if (
     huggable.length === 1 &&
@@ -705,8 +648,12 @@ function paramsGroup(sourceCode, node) {
   return { node, gaps, range, kind: 'params', items: params };
 }
 
-/** #7: inside the parens of if / while / do-while / switch. */
-function conditionGroup(sourceCode, node, openAnchor, close) {
+function conditionGroup(
+  sourceCode: Source,
+  node: Node,
+  openAnchor: Node | Token,
+  close: Token | null,
+): Group | null {
   const open = sourceCode.getTokenAfter(openAnchor, {
     filter: (t) => isPunct(t, '('),
   });
@@ -720,8 +667,7 @@ function conditionGroup(sourceCode, node, openAnchor, close) {
   };
 }
 
-/** #8: for clauses, at the semicolons. */
-function forGroup(sourceCode, node) {
+function forGroup(sourceCode: Source, node: TSESTree.ForStatement): Group | null {
   if (!node.init || !node.test || !node.update) return null;
   const semi1 = sourceCode.getTokenAfter(node.init, {
     filter: (t) => isPunct(t, ';'),
@@ -732,7 +678,7 @@ function forGroup(sourceCode, node) {
   if (!semi1 || !semi2) return null;
   // The head's own `)` — not the first `)` after the update clause, which is
   // that clause's own closing paren when it is parenthesized.
-  const close = sourceCode.getTokenBefore(sourceCode.getFirstToken(node.body), {
+  const close = sourceCode.getTokenBefore(sourceCode.getFirstToken(node.body)!, {
     filter: (t) => isPunct(t, ')'),
   });
   if (!close) return null;
@@ -743,18 +689,19 @@ function forGroup(sourceCode, node) {
   };
 }
 
-/** #9: import/export specifier lists, as object literal. */
-function specifierGroup(sourceCode, node, kinds) {
+function specifierGroup(
+  sourceCode: Source,
+  node: TSESTree.ImportDeclaration | TSESTree.ExportNamedDeclaration,
+  kinds: string[],
+): Group | null {
   const named = (node.specifiers ?? []).filter((s) => kinds.includes(s.type));
-  // A lone specifier stays inline however long the line: what makes these
-  // lines long is the module path, and no break inside the braces shortens
-  // that. Two or more break normally. (Prettier draws the line in the same
-  // place, so import blocks come out identical.)
+  // A lone specifier stays inline however long: the module path is what makes
+  // the line long, and no break inside the braces shortens it.
   if (named.length < 2) return null;
-  const open = sourceCode.getTokenBefore(sourceCode.getFirstToken(named[0]), {
+  const open = sourceCode.getTokenBefore(sourceCode.getFirstToken(named[0]!)!, {
     filter: (t) => isPunct(t, '{'),
   });
-  const close = sourceCode.getTokenAfter(named[named.length - 1], {
+  const close = sourceCode.getTokenAfter(named[named.length - 1]!, {
     filter: (t) => isPunct(t, '}'),
   });
   if (!open || !close) return null;
@@ -762,8 +709,10 @@ function specifierGroup(sourceCode, node, kinds) {
   return gaps && { node, gaps, range: [open.range[0], close.range[1]], items: named };
 }
 
-/** #11: ternaries, before ? and before :. */
-function ternaryGroup(sourceCode, node) {
+function ternaryGroup(
+  sourceCode: Source,
+  node: TSESTree.ConditionalExpression,
+): Group | null {
   const question = sourceCode.getTokenAfter(node.test, {
     filter: (t) => isPunct(t, '?'),
   });
@@ -781,40 +730,17 @@ function ternaryGroup(sourceCode, node) {
   };
 }
 
-/**
- * #23: JSX children, one per line.
- *
- * JSX is the one place in the grammar where whitespace between tokens is
- * *content*, so the usual guarantee — a newline never changes meaning —
- * has to be earned rather than assumed. Checked against TypeScript's own
- * JSX emit, four of the six ways to break children are transparent and two
- * are not, and both exceptions are the same thing: a break landing on a
- * space that separates two pieces of content. JSX drops whitespace runs
- * containing a newline, so that space disappears.
- *
- *     <p><a/><b/></p>        breaking between them: no space to lose
- *     <p><a/> <b/></p>       the space *is* content; breaking deletes it
- *     <p>hi <b/></p>         same, with the space inside the text node
- *
- * Prettier solves the second case by emitting `{" "}`, which Fold cannot
- * do — it only ever inserts newlines. So the rule is conservative: an
- * element is breakable only when every text child is whitespace that
- * already contains a newline, or there are no text children at all. That
- * covers element-only children, which is the common React shape, and
- * declines the rest rather than guessing.
- *
- * Prose re-wrapping is out of reach for a different reason: it would mean
- * splitting a JSXText *token*, and Fold only ever edits the whitespace
- * between tokens.
- */
-function jsxChildrenGroup(sourceCode, node, opening, closing) {
+function jsxChildrenGroup(
+  sourceCode: Source,
+  node: TSESTree.JSXElement | TSESTree.JSXFragment,
+  opening: Node,
+  closing: Node,
+): Group | null {
   if (!closing) return null; // self-closing: no children
   const children = node.children ?? [];
-  const isBlank = (c) => c.type === 'JSXText' && c.value.trim() === '';
+  const isBlank = (c: Node) => c.type === 'JSXText' && c.value.trim() === '';
   const content = children.filter((c) => !isBlank(c));
   if (content.length === 0) return null;
-  // Any text child that carries significant whitespace, or blank text with
-  // no newline in it, means a break here would change what renders.
   const unsafe = children.some(
     (c) => c.type === 'JSXText' && (!isBlank(c) || !/[\r\n]/.test(c.value)),
   );
@@ -824,16 +750,13 @@ function jsxChildrenGroup(sourceCode, node, opening, closing) {
   const close = sourceCode.getFirstToken(closing);
   if (!open || !close) return null;
 
-  // `{" "}` is how JSX writes a space that has to survive formatting, and
-  // by convention it stays on the line it belongs to — alone on a line it
-  // reads as noise. Breaking before it is safe but unhelpful, so don't.
-  const isSpaceMarker = (child) =>
+  const isSpaceMarker = (child: Node) =>
     child.type === 'JSXExpressionContainer' &&
     child.expression?.type === 'Literal' &&
     typeof child.expression.value === 'string' &&
     child.expression.value.trim() === '';
 
-  const gaps = [
+  const gaps: Gap[] = [
     { start: open.range[1], end: content[0].range[0], kind: 'item', join: '' },
   ];
   for (let i = 1; i < content.length; i++) {
@@ -851,24 +774,20 @@ function jsxChildrenGroup(sourceCode, node, opening, closing) {
     kind: 'close',
     join: '',
   });
-  // Nesting an element inside another is a structural break, not a width
-  // one: nobody writes `<td><input /></td>` on one line, and Prettier
-  // breaks it at any width. So an element child makes this a *necessary*
-  // break (§3.1). Children that are only text or expressions stay
-  // width-driven — `<b>bold</b>` and `<span>{value}</span>` are ordinary
-  // inline values and Prettier leaves them alone too.
   const nested = content.some(
     (child) => child.type === 'JSXElement' || child.type === 'JSXFragment',
   );
   return { node, gaps, items: content, necessary: nested };
 }
 
-/** #12: JSX attributes, as object properties. */
-function jsxGroup(sourceCode, node) {
+function jsxGroup(
+  sourceCode: Source,
+  node: TSESTree.JSXOpeningElement,
+): Group | null {
   const attrs = node.attributes;
   if (!attrs || attrs.length === 0) return null;
-  const last = sourceCode.getLastToken(node);
-  const beforeLast = sourceCode.getTokenBefore(last);
+  const last = sourceCode.getLastToken(node)!;
+  const beforeLast = sourceCode.getTokenBefore(last!);
   const closeToken =
     node.selfClosing && isPunct(beforeLast, '/') ? beforeLast : last;
   return {
@@ -876,30 +795,21 @@ function jsxGroup(sourceCode, node) {
     items: attrs,
     gaps: [
       ...attrs.map((attr) =>
-        gapBefore(sourceCode, sourceCode.getFirstToken(attr), 'item', ' '),
+        gapBefore(sourceCode, sourceCode.getFirstToken(attr)!, 'item', ' '),
       ),
       gapBefore(sourceCode, closeToken, 'close', node.selfClosing ? ' ' : ''),
     ],
   };
 }
 
-// ---------------------------------------------------------------------------
-// The TypeScript type layer (§3.3 #17–#22, §4.10)
-//
-// §3.3's table was derived from the ESTree grammar, so it covered exactly
-// the JavaScript layer. Type syntax parsed safely and was never corrupted,
-// but nothing in it was a break candidate — a long union, a type literal or
-// a type-argument list simply had no legal position and was left over
-// width. These add the type layer using the same shapes as their value
-// counterparts.
-// ---------------------------------------------------------------------------
-
-/** #17: type arguments and type parameters — `f<A, B>()`, `class C<T, U>`. */
-function typeListGroup(sourceCode, node) {
+function typeListGroup(
+  sourceCode: Source,
+  node: TSESTree.TSTypeParameterInstantiation | TSESTree.TSTypeParameterDeclaration,
+): Group | null {
   const items = node.params;
   if (!items || items.length === 0) return null;
-  const open = sourceCode.getFirstToken(node);
-  const close = sourceCode.getLastToken(node);
+  const open = sourceCode.getFirstToken(node)!;
+  const close = sourceCode.getLastToken(node)!;
   if (!isPunct(open, '<') || !isPunct(close, '>')) return null;
   const gaps = listGaps(sourceCode, open, close, items);
   return (
@@ -912,41 +822,37 @@ function typeListGroup(sourceCode, node) {
   );
 }
 
-/**
- * #18: type literals and interface bodies — `{ a: X; b: Y }`. Members are
- * separated by `;` as often as `,`, which is why listGaps takes a separator
- * set rather than assuming commas.
- */
-function typeMembersGroup(sourceCode, node, members) {
+function typeMembersGroup(
+  sourceCode: Source,
+  node: Node,
+  members: Node[],
+): Group | null {
   if (!members || members.length === 0) return null;
-  const open = sourceCode.getFirstToken(node);
-  const close = sourceCode.getLastToken(node);
+  const open = sourceCode.getFirstToken(node)!;
+  const close = sourceCode.getLastToken(node)!;
   if (!isPunct(open, '{') || !isPunct(close, '}')) return null;
   const gaps = listGaps(sourceCode, open, close, members, [';', ',']);
   return gaps && { node, gaps, items: members };
 }
 
-/** #19: tuple types — `[A, B, C]`, an array literal by another name. */
-function tupleTypeGroup(sourceCode, node) {
+function tupleTypeGroup(sourceCode: Source, node: TSESTree.TSTupleType): Group | null {
   const items = node.elementTypes;
   if (!items || items.length === 0) return null;
-  const open = sourceCode.getFirstToken(node);
-  const close = sourceCode.getLastToken(node);
+  const open = sourceCode.getFirstToken(node)!;
+  const close = sourceCode.getLastToken(node)!;
   if (!isPunct(open, '[') || !isPunct(close, ']')) return null;
   const gaps = listGaps(sourceCode, open, close, items);
   return gaps && { node, gaps, items };
 }
 
-/**
- * #20: unions and intersections — `A | B | C`. An operator chain in the type
- * layer, so it breaks at the operator and takes §4.7's no-staircase rule.
- * A leading `|` or `&` is legal and already broken by convention, so only
- * the separators *between* members become gaps.
- */
-function typeOperatorGroup(sourceCode, node, operator) {
+function typeOperatorGroup(
+  sourceCode: Source,
+  node: TSESTree.TSUnionType | TSESTree.TSIntersectionType,
+  operator: string,
+): Group | null {
   const types = node.types;
   if (!types || types.length < 2) return null;
-  const gaps = [];
+  const gaps: Gap[] = [];
   for (let i = 1; i < types.length; i++) {
     const token = sourceCode.getTokenBefore(types[i], {
       filter: (t) => isPunct(t, operator),
@@ -955,10 +861,9 @@ function typeOperatorGroup(sourceCode, node, operator) {
     const prev = sourceCode.getTokenBefore(token, { includeComments: true });
     const next = sourceCode.getTokenAfter(token, { includeComments: true });
     gaps.push({
-      start: prev.range[1],
+      start: prev!.range[1],
       end: token.range[0],
-      alt: { start: token.range[1], end: next.range[0] },
-      altJoin: ' ',
+      alt: { start: token.range[1], end: next!.range[0] },
       kind: 'item',
       join: ' ',
     });
@@ -966,8 +871,10 @@ function typeOperatorGroup(sourceCode, node, operator) {
   return { node, gaps, kind: 'operator' };
 }
 
-/** #21: conditional types — `T extends U ? X : Y`, a ternary in the types. */
-function conditionalTypeGroup(sourceCode, node) {
+function conditionalTypeGroup(
+  sourceCode: Source,
+  node: TSESTree.TSConditionalType,
+): Group | null {
   const question = sourceCode.getTokenAfter(node.extendsType, {
     filter: (t) => isPunct(t, '?'),
   });
@@ -985,15 +892,17 @@ function conditionalTypeGroup(sourceCode, node) {
   };
 }
 
-/** #22: `implements A, B` on a class heritage clause. */
-function implementsGroup(sourceCode, node) {
+function implementsGroup(
+  sourceCode: Source,
+  node: TSESTree.ClassDeclaration | TSESTree.ClassExpression,
+): Group | null {
   const items = node.implements;
   if (!items || items.length < 2) return null;
   const keyword = sourceCode.getTokenBefore(items[0], {
     filter: (t) => t.value === 'implements',
   });
   if (!keyword) return null;
-  const gaps = [];
+  const gaps: Gap[] = [];
   for (let i = 1; i < items.length; i++) {
     const comma = sourceCode.getTokenAfter(items[i - 1], {
       filter: (t) => isPunct(t, ','),
@@ -1008,38 +917,15 @@ function implementsGroup(sourceCode, node) {
   };
 }
 
-// Assignment operators, for the break after them (§3.3 #16).
 const ASSIGN_OPS = new Set([
   '=', '+=', '-=', '*=', '/=', '%=', '**=',
   '<<=', '>>=', '>>>=', '&=', '|=', '^=',
   '&&=', '||=', '??=',
 ]);
 
-/**
- * #16: the break after an assignment's operator, putting the right-hand
- * side on its own line.
- *
- * Marked `fallback`, so it is only reached when a line has no other
- * candidate at all. When the right-hand side can break — a call, an object,
- * a ternary — breaking *it* is better, and that is what already happens.
- * This exists for the case where nothing inside the value can be split: a
- * member path, a template, a cast. Those lines were simply left long.
- */
-/**
- * #16, second half: the break after a `:`, for an object property or a type
- * annotation. The same construct as an assignment — a name bound to a
- * value — so it gets the same last-resort treatment. Without it the two
- * were arbitrarily different.
- */
-/**
- * A value with no interior structure to break: a string, a template, a
- * number. Moving one of these onto its own line is the one fallback break
- * that reliably fails to pay for itself — the value is exactly as long
- * wherever it goes, so the line either still overflows or is one line
- * longer for nothing. Prettier declines these too, tolerating the long
- * line, and matching it removed three of Fold's four disagreements with it.
- */
-function isUnbreakableLeaf(node) {
+// A value with no interior structure. Moving one to its own line never pays:
+// it is as long wherever it goes. Prettier declines these too.
+function isUnbreakableLeaf(node: Node): boolean {
   return (
     node.type === 'Literal' ||
     node.type === 'TemplateLiteral' ||
@@ -1047,17 +933,17 @@ function isUnbreakableLeaf(node) {
   );
 }
 
-function colonGroup(sourceCode, node, value) {
+function colonGroup(
+  sourceCode: Source,
+  node: TSESTree.Property | TSESTree.TSPropertySignature,
+  value: Node | null | undefined,
+): Group | null {
   if (!value || isUnbreakableLeaf(value)) return null;
   const colon = sourceCode.getTokenBefore(value, {
     filter: (t) => isPunct(t, ':'),
   });
-  // The colon must lie between *this* node's key and its value. A filtered
-  // backwards search is unbounded, so for a construct that has no colon at
-  // all — a shorthand method, `test({ x }) {}` — it happily returns the
-  // colon of the property *above*, and the break lands on an unrelated
-  // line. The value-side check alone does not catch this: that stray colon
-  // genuinely does precede the value.
+  // The backwards search is unbounded, so a shorthand method `test({ x }) {}`
+  // finds the colon of the property above and breaks an unrelated line.
   const keyEnd = node.key ? node.key.range[1] : node.range[0];
   if (!colon || colon.range[0] < keyEnd || colon.range[1] > value.range[0])
     return null;
@@ -1069,8 +955,11 @@ function colonGroup(sourceCode, node, value) {
   };
 }
 
-function assignmentGroup(sourceCode, node) {
-  const right = node.right ?? node.init;
+function assignmentGroup(
+  sourceCode: Source,
+  node: TSESTree.AssignmentExpression | TSESTree.VariableDeclarator,
+): Group | null {
+  const right = node.type === 'AssignmentExpression' ? node.right : node.init;
   if (!right || isUnbreakableLeaf(right)) return null;
   const operator = sourceCode.getTokenBefore(right, {
     filter: (t) => t.type === 'Punctuator' && ASSIGN_OPS.has(t.value),
@@ -1084,11 +973,13 @@ function assignmentGroup(sourceCode, node) {
   };
 }
 
-/** #13: variable declarator lists, after the comma. */
-function declaratorGroup(sourceCode, node) {
+function declaratorGroup(
+  sourceCode: Source,
+  node: TSESTree.VariableDeclaration,
+): Group | null {
   const decls = node.declarations;
   if (!decls || decls.length < 2) return null;
-  const gaps = [];
+  const gaps: Gap[] = [];
   for (let i = 0; i < decls.length - 1; i++) {
     const comma = sourceCode.getTokenAfter(decls[i], {
       filter: (t) => isPunct(t, ','),
@@ -1099,63 +990,44 @@ function declaratorGroup(sourceCode, node) {
   return { node, gaps };
 }
 
-function precedenceOf(node) {
+function precedenceOf(node: Node): number | null {
   if (node.type === 'AssignmentExpression') return 2;
   if (node.type === 'BinaryExpression' || node.type === 'LogicalExpression')
     return BINARY_PRECEDENCE[node.operator] ?? null;
   return null;
 }
 
-/** Right-associative operators chain through the right operand. */
-function nextOperand(node) {
-  if (node.type === 'AssignmentExpression' || node.operator === '**')
-    return node.right;
-  return node.left;
+function nextOperand(node: Node): Node {
+  const binary = node as { operator?: string; left: Node; right: Node };
+  if (node.type === 'AssignmentExpression' || binary.operator === '**')
+    return binary.right;
+  return binary.left;
 }
 
-function isParenthesized(sourceCode, node) {
+// A parenthesized operand is one unit and does not join the enclosing run.
+function isParenthesized(sourceCode: Source, node: Node): boolean {
   const before = sourceCode.getTokenBefore(node);
   const after = sourceCode.getTokenAfter(node);
   return isPunct(before, '(') && isPunct(after, ')');
 }
 
-/**
- * An operator chain candidate rooted at `node`: every operator in the run of
- * equal precedence (§3.3 #4, §4.2). Members of the run are recorded in
- * `absorbed` so they don't produce their own candidates.
- *
- * Which side of the operator breaks is `operatorSide` — inferred from the
- * file, 'after' fallback. Each gap carries the other side as `alt`: a
- * newline on either side counts as broken, so Fold never fights
- * `@stylistic/operator-linebreak` regardless of how it's configured — worst
- * case it inserts on the wrong side once and the fix loop settles (§2.2).
- */
-/**
- * Every assignment operator really is precedence 2, so precedence alone puts
- * `a = b += c` in one run — and then group consistency breaks both operators
- * because the source broke one.
- *
- * But equal precedence is not the same relation here that it is for `+` and
- * `-`. `a = b = c` is one chain handing a single value to several targets, so
- * breaking it in one place and not another really is inconsistent. `a = b +=
- * c` parses as `a = (b += c)`: the compound assignment is a nested
- * expression, not a peer link, and there is nothing inconsistent about
- * breaking the outer binding while leaving the inner mutation inline.
- *
- * So chain membership requires the same operator, rather than merely the same
- * precedence. This lives here and not in BINARY_PRECEDENCE deliberately —
- * that table documents the actual grammar, and the distinction being drawn
- * here is not one the grammar makes.
- */
-function sameAssignmentOperator(current, node) {
+// `a = b = c` hands one value to several targets; `a = b += c` parses as
+// `a = (b += c)`, nested rather than peer. Equal precedence is not enough.
+function sameAssignmentOperator(current: Node, node: Node): boolean {
   return (
     current === node ||
     current.type !== 'AssignmentExpression' ||
-    current.operator === node.operator
+    (current as { operator: string }).operator ===
+      (node as { operator: string }).operator
   );
 }
 
-function chainGroup(sourceCode, node, absorbed, operatorSide) {
+function chainGroup(
+  sourceCode: Source,
+  node: Node,
+  absorbed: Set<Node>,
+  operatorSide: OperatorSide,
+): Group | null {
   const precedence = precedenceOf(node);
   const members = [];
   let current = node;
@@ -1167,52 +1039,33 @@ function chainGroup(sourceCode, node, absorbed, operatorSide) {
     members.push(current);
     current = nextOperand(current);
   }
-  // Assignment breaks only as a chain (`a = b = c`, §4.2); a lone `=` is not
-  // a break candidate — the right-hand side's own structure breaks instead.
   if (node.type === 'AssignmentExpression' && members.length < 2) return null;
   for (const member of members) absorbed.add(member);
-  const gaps = members.map((member) => {
-    const operator = sourceCode.getTokenAfter(member.left, {
-      filter: (t) => t.value === member.operator,
+  const gaps: Gap[] = members.map((member) => {
+    const operator = sourceCode.getTokenAfter((member as { left: Node }).left, {
+      filter: (t: Token) => t.value === (member as { operator: string }).operator,
     });
-    const prev = sourceCode.getTokenBefore(operator, { includeComments: true });
-    const next = sourceCode.getTokenAfter(operator, { includeComments: true });
-    const before = { start: prev.range[1], end: operator.range[0] };
-    const after = { start: operator.range[1], end: next.range[0] };
+    const prev = sourceCode.getTokenBefore(operator!, { includeComments: true });
+    const next = sourceCode.getTokenAfter(operator!, { includeComments: true });
+    const before = { start: prev!.range[1], end: operator!.range[0] };
+    const after = { start: operator!.range[1], end: next!.range[0] };
     const main = operatorSide === 'before' ? before : after;
     const alt = operatorSide === 'before' ? after : before;
     return { start: main.start, end: main.end, alt, kind: 'item', join: ' ' };
   });
   gaps.sort((a, b) => a.start - b.start);
-  // `kind: 'operator'` marks a group with no bracket of its own. When such a
-  // group already starts its line, the continuation indent is the nesting
-  // signal, so its operands align to that line instead of stepping in again
-  // (see the indent choice in format.js).
   return { node, gaps, kind: 'operator' };
 }
 
-/**
- * Collect break candidates. Returns:
- *  - candidates: width-gated optional-break groups, in walk order
- *  - necessary: §3.1 groups, broken unconditionally
- *
- * When a call is both a chain root and an argument-list group, the chain
- * candidate is pushed first: for the same node, the chain-level break is
- * preferred, and the selection sort is stable.
- */
-export function collectGroups(sourceCode, operatorSide = 'after') {
-  const candidates = [];
-  const necessary = [];
-  const absorbed = new Set();
-  // Offsets where a statement begins. A bracket-less group starting one of
-  // these is a statement's own first token, so its continuation lines
-  // indent; a bracket-less group starting anywhere else already sits on a
-  // continuation line and must not step in again (see format.js).
-  const statementStarts = new Set();
-  // Ternaries chained through the alternate (`a ? b : c ? d : e`) are one
-  // construct, not nested ones, so they share a single indent level.
-  const flatTernaries = new Set();
+function collectGroups(sourceCode: Source, operatorSide: OperatorSide = 'after') {
+  const candidates: Group[] = [];
+  const necessary: Group[] = [];
+  const absorbed = new Set<Node>();
+  const statementStarts = new Set<number>();
+  const flatTernaries = new Set<Node>();
   walk(sourceCode.ast, (node) => {
+    // A bracket-less group starting a statement indents its continuation
+    // lines; one starting elsewhere already sits on a continuation line.
     if (/(Statement|Declaration)$/.test(node.type)) {
       statementStarts.add(node.range[0]);
     }
@@ -1220,6 +1073,8 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
       node.type === 'ConditionalExpression' &&
       node.alternate.type === 'ConditionalExpression'
     ) {
+      // `a ? b : c ? d : e` is one construct, not nested ones, so the chain
+      // shares a single indent level.
       flatTernaries.add(node.alternate);
     }
     const need = necessaryGroup(sourceCode, node);
@@ -1228,6 +1083,8 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
       case 'CallExpression':
       case 'NewExpression':
       case 'MemberExpression': {
+        // Chain first: when a call is both a chain root and an argument list,
+        // the chain-level break wins, and the selection sort is stable.
         if (!absorbed.has(node)) {
           const chain = methodChainGroup(sourceCode, node, absorbed);
           if (chain) candidates.push(chain);
@@ -1255,6 +1112,8 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
           const chain = chainGroup(sourceCode, node, absorbed, operatorSide);
           if (chain) candidates.push(chain);
         }
+        // Assignment breaks as a chain (`a = b = c`); a lone `=` is only a
+        // fallback, since the right-hand side's own structure breaks first.
         if (node.type === 'AssignmentExpression') {
           const assign = assignmentGroup(sourceCode, node);
           if (assign) candidates.push(assign);
@@ -1264,9 +1123,8 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
       case 'FunctionDeclaration':
       case 'FunctionExpression':
       case 'ArrowFunctionExpression': {
-        // The body break comes first: for `f(x => g(a, b))` it is preferred
-        // over breaking the parameter list, and outermost-first would
-        // otherwise pick whichever starts earlier.
+        // Body first: for `f(x => g(a, b))` the body break is preferred over
+        // the parameter list, which outermost-first would not choose.
         const body = arrowBodyGroup(sourceCode, node);
         if (body) candidates.push(body);
         const group = paramsGroup(sourceCode, node);
@@ -1275,13 +1133,13 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
       }
       case 'IfStatement': {
         const close = sourceCode.getTokenBefore(
-          sourceCode.getFirstToken(node.consequent),
+          sourceCode.getFirstToken(node.consequent)!,
           { filter: (t) => isPunct(t, ')') },
         );
         const group = conditionGroup(
           sourceCode,
           node,
-          sourceCode.getFirstToken(node),
+          sourceCode.getFirstToken(node)!,
           close,
         );
         if (group) candidates.push(group);
@@ -1289,13 +1147,13 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
       }
       case 'WhileStatement': {
         const close = sourceCode.getTokenBefore(
-          sourceCode.getFirstToken(node.body),
+          sourceCode.getFirstToken(node.body)!,
           { filter: (t) => isPunct(t, ')') },
         );
         const group = conditionGroup(
           sourceCode,
           node,
-          sourceCode.getFirstToken(node),
+          sourceCode.getFirstToken(node)!,
           close,
         );
         if (group) candidates.push(group);
@@ -1305,7 +1163,7 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
         const whileKeyword = sourceCode.getTokenAfter(node.body, {
           filter: (t) => t.value === 'while',
         });
-        const last = sourceCode.getLastToken(node);
+        const last = sourceCode.getLastToken(node)!;
         const close = isPunct(last, ';')
           ? sourceCode.getTokenBefore(last)
           : last;
@@ -1321,7 +1179,7 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
         const close = brace && sourceCode.getTokenBefore(brace);
         const group =
           close &&
-          conditionGroup(sourceCode, node, sourceCode.getFirstToken(node), close);
+          conditionGroup(sourceCode, node, sourceCode.getFirstToken(node)!, close);
         if (group) candidates.push(group);
         break;
       }
@@ -1368,8 +1226,10 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
         const group = jsxChildrenGroup(
           sourceCode,
           node,
-          node.openingElement ?? node.openingFragment,
-          node.closingElement ?? node.closingFragment,
+          node.type === 'JSXElement' ? node.openingElement : node.openingFragment,
+          node.type === 'JSXElement'
+            ? node.closingElement!
+            : node.closingFragment,
         );
         if (group) (group.necessary ? necessary : candidates).push(group);
         break;
@@ -1401,7 +1261,6 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
         break;
       }
 
-      // The TypeScript type layer.
       case 'TSTypeParameterInstantiation':
       case 'TSTypeParameterDeclaration': {
         const group = typeListGroup(sourceCode, node);
@@ -1435,7 +1294,6 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
       }
       case 'TSFunctionType':
       case 'TSConstructorType': {
-        // Same shape as a value-level parameter list — `(a: X, b: Y) => Z`.
         const group = paramsGroup(sourceCode, node);
         if (group) candidates.push(group);
         break;
@@ -1452,8 +1310,6 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
         break;
       }
       case 'TSTypeAliasDeclaration': {
-        // `type X = …` is neither an assignment nor a declarator, so #16
-        // did not reach it.
         const right = node.typeAnnotation;
         const operator =
           right &&
@@ -1470,35 +1326,26 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
       }
     }
   });
-  // When a trailing arrow takes the break after its `=>`, the call's closing
-  // paren goes on its own line as well:
-  //
-  //   promise.then((response) =>
-  //     transformTheResponse(response, options, extra)
-  //   );
-  //
-  // The two breaks are one decision, so the close gap joins the arrow's
-  // group rather than staying with the call — whose own gaps do not break,
-  // since the arrow is hugging it.
+
+  // A trailing arrow's `=>` break and the call's closing paren are one
+  // decision, so the close gap joins the arrow's group rather than the call's.
   const arrowGroups = new Map(
     candidates.filter((g) => g.kind === 'arrow').map((g) => [g.node, g]),
   );
   for (const group of candidates) {
     if (!group.items || group.items.length === 0) continue;
     if (group.kind === 'params' || group.kind === 'arrow') continue;
-    const arrow = arrowGroups.get(group.items[group.items.length - 1]);
+    const last = group.items[group.items.length - 1];
+    const arrow = last ? arrowGroups.get(last) : undefined;
     if (!arrow) continue;
     const closeGap = group.gaps[group.gaps.length - 1];
     if (closeGap && closeGap.kind === 'close') arrow.gaps.push(closeGap);
   }
 
-  // A hugged argument's signature is part of the call's head: the break is
-  // absorbed by its body, so its parameter list must not become the next
-  // candidate. Without this, `it("...", function (done) {` breaks as
-  // `function (\n  done\n) {` — the call level is off the table, so the
-  // params are all that is left.
+  // A hugged argument's signature belongs to the call's head. Without this,
+  // `it("...", function (done) {` breaks as `function (\n  done\n) {`.
   const hugged = new Set(
-    candidates.filter((g) => g.hug).map((g) => g.hug.join(':')),
+    candidates.filter((g) => g.hug).map((g) => g.hug!.join(':')),
   );
   for (const group of candidates) {
     if (group.kind === 'params' && hugged.has(group.node.range.join(':'))) {
@@ -1506,13 +1353,9 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
     }
   }
 
-  // Never fold inside a template literal (§3.3 #14 was to be a last
-  // resort; in practice the results — a method chain split across an
-  // interpolation — read worse than a long line, and the line is usually
-  // long because of the template's *text*, which no break can shorten).
-  // Marking these un-addable also stops the consistency pass touching them,
-  // so a hand-written layout inside an interpolation is left exactly alone.
-  const templateRanges = [];
+  // Never fold inside a template literal: splitting a value across an
+  // interpolation reads worse than the long line.
+  const templateRanges: Range[] = [];
   walk(sourceCode.ast, (node) => {
     if (node.type === 'TemplateLiteral') templateRanges.push(node.range);
   });
@@ -1520,54 +1363,19 @@ export function collectGroups(sourceCode, operatorSide = 'after') {
     const [start, end] = group.range ?? group.node.range;
     if (!templateRanges.some((range) => range[0] < start && end <= range[1]))
       continue;
-    // §3.3 #14 stays cut. Reopened once on the observation that most long
-    // template lines are long because of their *expressions* rather than
-    // their text — which is true, and turns out not to matter: Prettier
-    // declines these too, leaving the line long rather than splitting a
-    // value across an interpolation. Matching it is the right call, and the
-    // measurement that suggested otherwise counted lines that *could* be
-    // broken, not lines any formatter would want broken.
     group.addable = false;
   }
 
   return { candidates, necessary, statementStarts };
 }
 
-// =======================
-// = The core (§2.4, §6) =
-// =======================
-
-/**
- * The pure core (§2.4): format(sourceCode, options) → Edit[].
- *
- * An Edit is:
- *   {
- *     range: [start, end],   // source offsets; text in this range is replaced
- *     text: string,          // replacement (newline + indent)
- *     loc: { start, end },   // where the rule reports it — the real token
- *     messageId: string,     // 'overWidth' | 'necessaryBreak' |
- *                            //   'inconsistentGroup'
- *     data?: object,         // message interpolation data
- *   }
- *
- * Only `range` and `text` affect the output text; the rest is reporting
- * metadata for the rule adapter. Edits are returned sorted descending by
- * position (§2.5) so the test harness can apply them to a string without
- * offset bookkeeping.
- *
- * The algorithm works over a *projection* (§6): virtual lines. A virtual
- * line is a contiguous source range plus the indent text that will precede
- * it once edits apply. Breaking a group splits the virtual lines its gaps
- * live on; nothing is applied to the text until ESLint applies the fixes.
- */
-
-export const DEFAULT_MAX_WIDTH = 80;
+const DEFAULT_MAX_WIDTH = 80;
 
 const indentCache = new WeakMap();
 
 const LINE_BREAK = /\r\n|[\n\r\u2028\u2029]/g;
 
-function physicalLines(text) {
+function physicalLines(text: string): VLine[] {
   const lines = [];
   let start = 0;
   LINE_BREAK.lastIndex = 0;
@@ -1580,22 +1388,17 @@ function physicalLines(text) {
   return lines;
 }
 
-function lineWidth(text, vline) {
+function lineWidth(text: string, vline: VLine): number {
   return measureLine(vline.indent + text.slice(vline.start, vline.end));
 }
 
-/** Leading whitespace the line will have once edits apply. */
-function lineIndent(text, vline) {
-  return vline.indent + /^[ \t]*/.exec(text.slice(vline.start, vline.end))[0];
+function lineIndent(text: string, vline: VLine): string {
+  return vline.indent + /^[ \t]*/.exec(text.slice(vline.start, vline.end))![0];
 }
 
-/**
- * The file's line ending, inferred like the indent unit (§7). Inserting a
- * bare '\n' into a CRLF file would leave mixed endings behind — a diff on
- * every touched line for Windows projects, and a fight with
- * `@stylistic/linebreak-style`.
- */
-function inferNewline(text) {
+// A bare '\n' in a CRLF file leaves mixed endings: a diff on every touched
+// line, and a fight with @stylistic/linebreak-style.
+function inferNewline(text: string): string {
   let crlf = 0;
   let lf = 0;
   for (let i = text.indexOf('\n'); i !== -1; i = text.indexOf('\n', i + 1)) {
@@ -1605,21 +1408,15 @@ function inferNewline(text) {
   return crlf > lf ? '\r\n' : '\n';
 }
 
-/**
- * Which side of a binary operator the file breaks on, inferred like the
- * indent unit (§7): count existing operator-adjacent newlines. Only
- * side-unambiguous operator tokens are sampled — '+', '-', '*' and friends
- * could be unary or generator stars. Fallback is 'after', matching
- * `@stylistic/operator-linebreak`'s default, so a file with no signal agrees
- * with the ecosystem default.
- */
+// Only side-unambiguous operators are sampled: '+', '-' and '*' may be unary
+// or a generator star, which would pollute the count.
 const INFER_OPS = new Set([
   '&&', '||', '??', '==', '===', '!=', '!==', '<=', '>=',
   '<<', '>>', '>>>', '%', '**', '&', '|', '^',
   '=', '+=', '-=', '*=', '/=', '%=', '&&=', '||=', '??=',
 ]);
 
-function inferOperatorSide(sourceCode) {
+function inferOperatorSide(sourceCode: Source): OperatorSide {
   const tokens = sourceCode.ast.tokens ?? [];
   let leading = 0;
   let trailing = 0;
@@ -1629,15 +1426,16 @@ function inferOperatorSide(sourceCode) {
     if (tokens[i - 1].loc.end.line < token.loc.start.line) leading++;
     else if (token.loc.end.line < tokens[i + 1].loc.start.line) trailing++;
   }
+  // 'after' matches @stylistic/operator-linebreak's default, so a file with
+  // no signal agrees with the ecosystem default.
   return leading > trailing ? 'before' : 'after';
 }
 
-/** First source offset on the line where the width crosses maxWidth. */
-function overflowStart(text, vline, maxWidth) {
+// Advances one character at a time; re-measuring the whole prefix at each
+// step would be quadratic in the overflow column.
+function overflowStart(text: string, vline: VLine, maxWidth: number): number {
   const indentWidth = measureLine(vline.indent);
   if (indentWidth > maxWidth) return vline.start;
-  // Advance one character at a time rather than re-measuring the whole
-  // prefix at each step, which would be quadratic in the overflow column.
   let width = indentWidth;
   let offset = vline.start;
   for (const char of text.slice(vline.start, vline.end)) {
@@ -1648,7 +1446,7 @@ function overflowStart(text, vline, maxWidth) {
   return vline.end;
 }
 
-export function format(sourceCode, options = {}) {
+function format(sourceCode: Source, options: { maxWidth?: number } = {}): Edit[] {
   const maxWidth = options.maxWidth ?? DEFAULT_MAX_WIDTH;
   const text = sourceCode.text;
 
@@ -1668,23 +1466,20 @@ export function format(sourceCode, options = {}) {
     operatorSide,
   );
   const vlines = physicalLines(text);
-  const edits = [];
-  const consumedGaps = new Set();
+  const edits: Edit[] = [];
+  const consumedGaps = new Set<Gap>();
 
-  const rangeHasBreak = (range) => {
+  const rangeHasBreak = (range: { start: number; end: number }) => {
     LINE_BREAK.lastIndex = 0;
     return LINE_BREAK.test(text.slice(range.start, range.end));
   };
 
-  // A gap with an `alt` range (operator gaps) counts as broken when either
-  // side of the operator carries the newline — Fold never fights an existing
-  // break over which side the operator sits on.
-  const hasBreak = (gap) =>
+  // An operator gap counts as broken when either side carries the newline, so
+  // Fold never fights an existing break over which side the operator sits on.
+  const hasBreak = (gap: Gap) =>
     rangeHasBreak(gap) || (gap.alt !== undefined && rangeHasBreak(gap.alt));
 
-  // Half-open [start, end): a split leaves a zero-width boundary shared by
-  // two lines, and an offset there belongs to the line that starts at it.
-  const findLine = (offset) => {
+  const findLine = (offset: number) => {
     const index = vlines.findIndex(
       (vl) => vl.start <= offset && offset < vl.end,
     );
@@ -1693,26 +1488,14 @@ export function format(sourceCode, options = {}) {
       : index;
   };
 
-  function breakGroup(group, messageId) {
+  function breakGroup(group: Group, messageId: MessageId) {
     const groupStart = (group.range ?? group.node.range)[0];
     const openLine = vlines[findLine(groupStart)];
     const baseIndent = lineIndent(text, openLine);
-    // No staircases. An operator chain or ternary has no bracket of its
-    // own, so when it already begins a continuation line, that line's
-    // indent *is* its nesting level — stepping in again would leave its
-    // first part a level shallower than the rest:
-    //
-    //   call(
-    //     a &&
-    //       b &&      <- the staircase a second step produces
-    //   );
-    //
-    // A bracket-less group that begins a *statement* is different: nothing
-    // has indented it yet, so its continuation lines do step in. Ternaries
-    // chained through the alternate share one level for the same reason —
-    // `a ? b : c ? d : e` is one construct, not nested ones.
     const bracketless = group.kind === 'operator' || group.kind === 'ternary';
     const startsLine = text.slice(openLine.start, groupStart).trim() === '';
+    // No staircase: a bracket-less group starting a continuation line takes
+    // that indent as its level, or its first operand ends up a level shallower.
     const align =
       group.flat === true ||
       (bracketless && startsLine && !statementStarts.has(groupStart));
@@ -1750,46 +1533,33 @@ export function format(sourceCode, options = {}) {
     }
   }
 
-  // Necessary breaks (§3.1) are unconditional: block bodies, class bodies,
-  // switch cases, and statement boundaries are always on their own lines,
-  // even when the one-liner would fit.
   for (const group of necessary) {
     breakGroup(group, 'necessaryBreak');
   }
 
-  const groupRange = (group) => group.range ?? group.node.range;
+  const groupRange = (group: Group): Range =>
+    (group.range ?? group.node.range) as Range;
   const BLANK_LINE = /(\r?\n)[ \t]*(\r?\n)/;
 
-  // Consistency pass (§5). Fold never joins lines: a break the author put
-  // there is a decision, and undoing it is what makes formatters
-  // adversarial (an FP `compose()` pipeline has no recourse). What Fold
-  // does enforce is §4.3 — a group is entirely inline or entirely broken —
-  // so a *partially* broken group gets completed to one item per line.
-  //
-  // Frozen, same taxonomy as before: a blank line inside (§3.4) or a
-  // comment inside means the author grouped something deliberately and
-  // Fold can't know what.
-  function completeGroup(group) {
-    if (group.addable === false) return; // hug level never breaks (§4.5)
-    // Method chains are exempt. A chain the author broke at some dots but
-    // not others is a deliberate head/tail split — `Object.keys(value)`
-    // kept whole, then `.filter(...)` and `.map(...)` on their own lines —
-    // and completing it would pull the head apart. §4.3's all-or-nothing is
-    // about element lists, where a half-broken list is just untidy.
+  // Fold never joins lines, so a partially broken group is completed rather
+  // than collapsed. Two kinds are exempt:
+  function completeGroup(group: Group) {
+    if (group.addable === false) return;
+    // A chain broken at some dots is a deliberate head/tail split;
+    // completing it would pull `Object.keys(value)` apart.
     if (group.kind === 'chain') return;
-    // An arrow group's gaps are not a list of peers: the break after `=>`
-    // and the enclosing call's closing paren are one decision, and the
-    // closing paren is broken by every ordinary call break too. Treating
-    // them as a group to "complete" would break the `=>` of every arrow
-    // sitting in an already-broken call.
+    // An arrow's gaps are not peers, so completing them would break the `=>`
+    // of every arrow sitting in an already-broken call.
     if (group.kind === 'arrow') return;
     if (group.complete === false) return;
     const gaps = group.gaps;
     const broken = gaps.filter(hasBreak);
-    if (broken.length === 0) return; // untouched — nothing to be consistent with
+    if (broken.length === 0) return;
     const breakable = gaps.filter((gap) => !isForbiddenBreak(sourceCode, gap));
     if (broken.length >= breakable.length) return; // already consistent
 
+    // A blank line or a comment inside means the author grouped something
+    // deliberately, and Fold cannot know what.
     const [rangeStart, rangeEnd] = groupRange(group);
     if (BLANK_LINE.test(text.slice(rangeStart, rangeEnd))) return;
     if (
@@ -1809,18 +1579,16 @@ export function format(sourceCode, options = {}) {
     completeGroup(group);
   }
 
-  // Gap position index. Without it, every over-width line would scan every
-  // candidate group in the file, making the addition pass quadratic in file
-  // size — seconds per pass on a large file, times ten fix passes.
-  const gapIndex = [];
+  // Gap position index. Without it every over-width line scans every candidate
+  // group in the file, making the addition pass quadratic in file size.
+  const gapIndex: { gap: Gap; group: Group }[] = [];
   for (const group of candidates) {
     for (const gap of group.gaps) gapIndex.push({ gap, group });
   }
   gapIndex.sort((a, b) => a.gap.start - b.gap.start);
   const gapStarts = gapIndex.map((entry) => entry.gap.start);
 
-  /** Candidate groups holding at least one gap that lies within `vl`. */
-  function groupsOnLine(vl) {
+  function groupsOnLine(vl: VLine) {
     let lo = 0;
     let hi = gapStarts.length;
     while (lo < hi) {
@@ -1828,22 +1596,17 @@ export function format(sourceCode, options = {}) {
       if (gapStarts[mid] < vl.start) lo = mid + 1;
       else hi = mid;
     }
-    const found = new Set();
+    const found = new Set<Group>();
     for (let i = lo; i < gapIndex.length && gapStarts[i] <= vl.end; i++) {
       if (gapIndex[i].gap.end <= vl.end) found.add(gapIndex[i].group);
     }
     return found;
   }
 
-  /**
-   * Is this line over width only because of a comment at the end of it?
-   * §7.1 calls that unbreakable: the code fits, and the comment cannot be
-   * shortened or moved — moving it to its own line is a vertical-spacing
-   * change, which §3.4 forbids. Breaking the code to make room for a
-   * comment reformats the wrong thing.
-   */
+  // A line over width only because of a trailing comment is unbreakable: the
+  // code fits, and moving the comment down is a vertical-spacing change.
   const comments = sourceCode.getAllComments();
-  function overflowIsTrailingComment(vl) {
+  function overflowIsTrailingComment(vl: VLine) {
     for (const comment of comments) {
       const [start, end] = comment.range;
       if (start < vl.start || start >= vl.end) continue;
@@ -1854,14 +1617,8 @@ export function format(sourceCode, options = {}) {
     return false;
   }
 
-  // Addition pass (§6 step 6): repeatedly break the outermost group that
-  // contains an over-width line's overflow, until every line either fits or
-  // has no legal candidate (§7.1: unbreakable lines get silence).
-  //
-  // The cursor does not advance after a break: the line was split, so the
-  // first half is re-examined in case it is still too long. Termination is
-  // by exhaustion — breakGroup consumes every gap of the group it breaks,
-  // so a group can be chosen at most once.
+  // Break the outermost group holding the overflow. The cursor does not
+  // advance; breakGroup consumes a group's gaps, so this ends by exhaustion.
   for (let cursor = 0; cursor < vlines.length; ) {
     const vl = vlines[cursor];
     if (lineWidth(text, vl) <= maxWidth || overflowIsTrailingComment(vl)) {
@@ -1869,30 +1626,17 @@ export function format(sourceCode, options = {}) {
       continue;
     }
     const overflow = overflowStart(text, vl, maxWidth);
-    /**
-     * A one-item group whose item is atomic and already wider than the
-     * limit cannot be helped by breaking: the item lands on a line of its
-     * own at exactly the width it had. That is two extra lines bought for
-     * nothing —
-     *
-     *   <a
-     *     href="https://…107 characters…"
-     *   >
-     *
-     * Only the single-item case is excluded. With two or more items,
-     * splitting them apart shortens the line even when one of them stays
-     * over the limit.
-     */
-    const cannotHelp = (group) => {
+    // A lone atomic item already too wide cannot be helped: it lands on its
+    // own line at the width it had. Two or more items do shorten the line.
+    const cannotHelp = (group: Group) => {
       if (!group.items || group.items.length !== 1) return false;
       const item = group.items[0];
       if (!item || !item.range) return false;
       const [itemStart, itemEnd] = item.range;
+      // Excluding the group's own gaps: they sit exactly on the item's edges,
+      // and are zero-width when the source has no spaces there.
       const hasInnerCandidate = gapIndex.some(
         ({ gap }) =>
-          // The group's own boundary gaps sit exactly on the item's edges
-          // (and are zero-width when the source has no spaces there), so
-          // they would otherwise look like candidates inside the item.
           !group.gaps.includes(gap) &&
           itemStart <= gap.start &&
           gap.end <= itemEnd &&
@@ -1918,11 +1662,8 @@ export function format(sourceCode, options = {}) {
             !isForbiddenBreak(sourceCode, gap),
         ),
     );
-    // Fallback groups (§3.3 #16, the break after an assignment operator) are
-    // last resort by construction: whenever anything inside the value can be
-    // split, splitting that reads better. They are only consulted when the
-    // line has nothing else, and only when the head they would leave behind
-    // actually fits — otherwise the break buys nothing.
+    // Last resort, and only when both halves fit: a 200-character string is
+    // still 200 characters one line further down.
     const breakable = onLine.filter((group) => !group.fallback);
     if (breakable.length === 0) {
       const rescue = onLine.filter(
@@ -1930,9 +1671,6 @@ export function format(sourceCode, options = {}) {
           group.fallback &&
           group.gaps.some((gap) => {
             if (consumedGaps.has(gap) || hasBreak(gap)) return false;
-            // Both halves have to fit, or the break achieves nothing: a
-            // 200-character string moved onto its own line is still a
-            // 200-character line, one line further down.
             const head = text.slice(vl.start, gap.start).trimEnd();
             const tail = text.slice(gap.end, vl.end);
             return (
@@ -1953,19 +1691,11 @@ export function format(sourceCode, options = {}) {
       continue;
     }
 
-    // Prefer a group that spans the overflow: breaking one that ends before
-    // it (`foo(a) + bar(oversized...)`) would split the wrong thing. But
-    // when nothing spans it — a line pushed over by a trailing `;` or `)`
-    // that belongs to no group — fall back to any group with a gap before
-    // the overflow, which still moves that tail down. Without the fallback
-    // such a line is silently left long even though it has a legal break.
+    // Prefer a group spanning the overflow, then one that reaches it:
+    // `assertEqual<A, B>(v)` overflows inside the type arguments, not at `(`.
     const spanning = breakable.filter(
       (group) => groupRange(group)[1] > overflow,
     );
-    // Among those, prefer one that can actually reach the overflow. A group
-    // whose gaps all sit *after* it cannot shorten the offending line:
-    // `assertEqual<A, B>(value)` overflows inside the type arguments, so
-    // breaking at the call's `(` leaves the head exactly as long as it was.
     const reaching = spanning.filter((group) =>
       group.gaps.some(
         (gap) =>
@@ -1995,27 +1725,9 @@ export function format(sourceCode, options = {}) {
   return edits;
 }
 
-/** Apply an edit list (as returned by format: sorted descending) to text. */
-export function applyEdits(text, edits) {
-  let result = text;
-  for (const edit of edits) {
-    result =
-      result.slice(0, edit.range[0]) + edit.text + result.slice(edit.range[1]);
-  }
-  return result;
-}
+type Options = [{ maxWidth?: number }?];
 
-// =========================
-// = The rule (§2.1, §2.3) =
-// =========================
-
-/**
- * fold/breaks — decides where the newlines go.
- *
- * The rule is an adapter (§2.4): call the pure format() core, emit each Edit
- * as its own surgical fix (§2.3). All decisions live in format().
- */
-export const breaks = {
+const breaks: TSESLint.RuleModule<MessageId, Options> = {
   meta: {
     type: 'layout',
     docs: {
@@ -2058,22 +1770,23 @@ export const breaks = {
   },
 };
 
-// ==============================
-// = The plugin (§2.1) =
-// ==============================
+interface FoldPlugin extends ESLint.Plugin {
+  configs: { recommended: Linter.Config };
+}
 
-const plugin = {
+const plugin: FoldPlugin = {
   meta: {
     name: 'eslint-plugin-fold',
     version: '0.1.0',
   },
-  rules: { breaks },
-  configs: {},
+  // ESLint types rules against ESTree; this one is typed against TSESTree so
+  // it can walk TypeScript nodes. The shapes are identical at runtime.
+  rules: { breaks: breaks as unknown as Rule.RuleModule },
+  // Filled in below.
+  configs: {} as FoldPlugin['configs'],
 };
 
-// Self-referential, so the config object has to be attached after the
-// plugin exists. `name` shows up in flat-config error messages and
-// `--inspect-config`.
+// Self-referential, so the config is attached after the plugin exists.
 plugin.configs.recommended = {
   name: 'fold/recommended',
   plugins: { fold: plugin },

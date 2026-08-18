@@ -55,6 +55,7 @@ jobs:
             exit 1
           fi
 
+      - run: npm run typecheck
       - run: npm test
       - run: npm run build
 
@@ -62,9 +63,9 @@ jobs:
       # width compliance — only bite on real code. This is the check that has
       # caught every dangerous bug in this project, so a release does not skip
       # it on the grounds that CI already ran.
-      - run: npm run corpus
-      - run: npm run audit
-      - run: npm run diff
+      - run: node scripts/clone-corpus.js
+      - run: node scripts/audit.js
+      - run: node scripts/diff-prettier.js
 
   stage:
     name: stage publish

@@ -1,5 +1,5 @@
 /**
- * The differential §8's test 5 asks for.
+ * The Prettier differential.
  *
  * Prettier-format a file, then run Fold over the result. Prettier has
  * already made every other formatting decision, so anything Fold changes is
@@ -12,19 +12,21 @@
  * At the time of writing: 249 of 250 files byte-identical. The one that
  * differs is deliberate — Prettier treats `a = b += c` as nested
  * assignments, where Fold treats the run as one chain and breaks it
- * consistently (§4.3).
+ * consistently.
  *
  * Set SHOW=1 to print every disagreeing hunk.
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { SourceCode } from 'eslint';
+import { Linter } from 'eslint';
 import tseslint from 'typescript-eslint';
 import prettier from 'prettier';
-import { format, applyEdits } from '../src/index.js';
+import fold from '../src/index.ts';
 import {
-  CORPUS, PARSE_OPTIONS, requireCorpus, sample, sourceFiles,
+  CORPUS, requireCorpus, sample, sourceFiles,
 } from './corpus.js';
+
+const linter = new Linter();
 
 const WIDTH = Number(process.env.WIDTH ?? 80);
 const PER_REPO = Number(process.env.N ?? 25);
@@ -56,19 +58,21 @@ for (const repo of requireCorpus()) {
       continue; // Prettier could not parse it; not our business
     }
 
-    let ast;
-    try {
-      ast = tseslint.parser.parseForESLint(pretty, PARSE_OPTIONS).ast;
-    } catch {
-      continue;
-    }
-
     let out;
     try {
-      out = applyEdits(
-        pretty,
-        format(new SourceCode({ text: pretty, ast }), { maxWidth: WIDTH }),
-      );
+      const result = linter.verifyAndFix(pretty, {
+        plugins: { fold },
+        linterOptions: { reportUnusedDisableDirectives: 'off' },
+        rules: { 'fold/breaks': ['error', { maxWidth: WIDTH }] },
+        languageOptions: {
+          parser: tseslint.parser,
+          ecmaVersion: 'latest',
+          sourceType: 'module',
+          parserOptions: { ecmaFeatures: { jsx: true } },
+        },
+      });
+      if (result.messages.some((message) => message.fatal)) continue;
+      out = result.output;
     } catch {
       continue;
     }

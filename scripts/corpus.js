@@ -121,7 +121,7 @@ export function printWidth(dir) {
 /**
  * JSX drops a whitespace run that contains a newline, so breaking between
  * element children adds text nodes that render as nothing. Those are the
- * only text nodes Fold ever creates (§3.3 #23 declines anything else), so
+ * only text nodes Fold ever creates, so
  * dropping exactly them is what makes AST comparison meaningful for JSX.
  * A blank text node *without* a newline is a real space and stays.
  */
