@@ -12,7 +12,6 @@
   },
   "author": "Brian Kim",
   "type": "module",
-  "private": true,
   "exports": {
     ".": "./src/index.js"
   },
@@ -25,7 +24,8 @@
     "audit": "node scripts/audit.js",
     "diff": "node scripts/diff-prettier.js",
     "build": "libuild build",
-    "stage": "libuild stage --provenance"
+    "stage": "libuild stage --provenance",
+    "prepublishOnly": "echo 'ERROR: Cannot publish from root directory. Use npm run stage instead.' && exit 1"
   },
   "keywords": [
     "eslint",
