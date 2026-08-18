@@ -1,0 +1,89 @@
+name: Release
+
+# Staged publishing over OIDC. This workflow holds no npm token and is not
+# permitted to publish: its trust grant on the registry is
+# `--allow-stage-publish` only, so the most a compromised run can do is put a
+# candidate in the staging area where it is visible and rejectable.
+#
+# Shipping is a separate, human act performed from a laptop with 2FA:
+#
+#     npm stage list
+#     npm stage download <stage-id>    # inspect the actual tarball
+#     npm stage approve <stage-id>     # or: npm stage reject <stage-id>
+#
+# One-time registry setup, run once by a package owner:
+#
+#     npm trust github eslint-plugin-fold \
+#       --repo bikeshaving/fold \
+#       --file release.yml \
+#       --allow-stage-publish
+#
+# The `--file` argument names *this* file. Renaming it invalidates the grant.
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+
+      # A tag that disagrees with the manifest would stage a version nobody
+      # asked for, under a git ref that does not describe it.
+      - name: Tag matches package.json version
+        run: |
+          tagged="${GITHUB_REF_NAME#v}"
+          declared="$(node -p 'require("./package.json").version')"
+          if [ "$tagged" != "$declared" ]; then
+            echo "tag $GITHUB_REF_NAME does not match package.json $declared" >&2
+            exit 1
+          fi
+
+      - run: npm test
+      - run: npm run build
+
+      # The invariants that matter — semantic preservation, idempotence,
+      # width compliance — only bite on real code. This is the check that has
+      # caught every dangerous bug in this project, so a release does not skip
+      # it on the grounds that CI already ran.
+      - run: npm run corpus
+      - run: npm run audit
+      - run: npm run diff
+
+  stage:
+    name: stage publish
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Mints the short-lived OIDC token npm exchanges for stage-publish
+      # rights. No NPM_TOKEN secret exists in this repository.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          registry-url: 'https://registry.npmjs.org'
+
+      # Trusted publishing needs npm >= 11.5.1; pinning to latest keeps this
+      # from depending on whichever npm the node image happens to bundle.
+      - run: npm install -g npm@latest
+      - run: npm ci
+      - run: npm run build
+
+      # Publishing is from dist/, never the repository root. The root manifest
+      # has `files: ["docs"]` and points `exports` at ./src, so a root publish
+      # would ship documentation and no code at all. libuild writes a complete,
+      # self-contained manifest into dist/.
+      - name: Stage the release
+        run: npm stage publish ./dist --provenance
