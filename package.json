@@ -1,7 +1,7 @@
 {
-  "name": "eslint-plugin-fold",
+  "name": "eslint-plugin-esfold",
   "version": "0.1.0",
-  "description": "A single ESLint rule, fold/breaks, that decides where the newlines go.",
+  "description": "A single ESLint rule, esfold/breaks, that decides where the newlines go.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/bikeshaving/esfold.git"

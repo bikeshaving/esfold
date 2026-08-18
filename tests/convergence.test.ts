@@ -8,7 +8,7 @@ import stylistic from '@stylistic/eslint-plugin';
 import fold from '../src/index.js';
 
 /**
- * The real `--fix` loop, with fold/breaks enabled alongside a full @stylistic
+ * The real `--fix` loop, with esfold/breaks enabled alongside a full @stylistic
  * config, over a corpus: a second `verifyAndFix` must produce no further
  * changes. The rule does not have to be right in one pass, but it does have
  * to settle, and only running the actual loop shows whether it does.
@@ -24,7 +24,7 @@ const MAX_FILES = 15;
 
 const configFor = (indentOptions: unknown[]): LinterTypes.Config[] => [
   {
-    plugins: { fold, '@stylistic': stylistic },
+    plugins: { esfold: fold, '@stylistic': stylistic },
     languageOptions: { ecmaVersion: 'latest', sourceType: 'commonjs' },
     // The corpus is ESLint's own source, whose eslint-disable comments are
     // all "unused" under this config — ESLint's own autofix would strip
@@ -34,7 +34,7 @@ const configFor = (indentOptions: unknown[]): LinterTypes.Config[] => [
       // 60, not 80. This corpus is tab-indented and already fits 80, so at
       // 80 Fold makes no edits at all and this test would verify only that
       // @stylistic converges with itself — which is not what it is for.
-      'fold/breaks': ['error', { maxWidth: 60 }],
+      'esfold/breaks': ['error', { maxWidth: 60 }],
       '@stylistic/semi': 'error',
       '@stylistic/quotes': ['error', 'single', { avoidEscape: true }],
       '@stylistic/indent': ['error', ...indentOptions],
@@ -116,7 +116,7 @@ for (const [name, config] of Object.entries(CONFIGS)) {
       const filename = `corpus-${files.indexOf(file)}.js`;
       foldEdits += linter
         .verify(code, config, { filename })
-        .filter((m) => m.ruleId === 'fold/breaks').length;
+        .filter((m) => m.ruleId === 'esfold/breaks').length;
       const first = linter.verifyAndFix(code, config, { filename });
       const fatal = first.messages.find((m) => m.fatal);
       if (fatal) continue; // unparseable under this config — not our concern

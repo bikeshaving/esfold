@@ -7,7 +7,7 @@ test('the plugin registers and fixes under a flat config', () => {
   const code = `const wide = compute(${'a'.repeat(40)}, ${'b'.repeat(40)});\n`;
   const result = linter.verifyAndFix(
     code,
-    { plugins: { fold }, rules: { 'fold/breaks': 'error' } },
+    { plugins: { esfold: fold }, rules: { 'esfold/breaks': 'error' } },
     { filename: 'example.js' },
   );
 

@@ -1865,7 +1865,7 @@ const breaks: TSESLint.RuleModule<MessageId, Options> = {
 // reason to configure this at all.
 const plugin: ESLint.Plugin = {
   meta: {
-    name: 'eslint-plugin-fold',
+    name: 'eslint-plugin-esfold',
     version: '0.1.0',
   },
   // ESLint types rules against ESTree; this one is typed against TSESTree so

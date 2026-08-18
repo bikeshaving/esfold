@@ -1,21 +1,21 @@
-# eslint-plugin-fold
+# eslint-plugin-esfold
 
 An ESLint plugin which breaks lines when they exceed a specified width, using
 ESLint’s `--fix` option.
 
 ```sh
-npm install --save-dev eslint-plugin-fold
+npm install --save-dev eslint-plugin-esfold
 ```
 
 `eslint.config.js`
 
 ```js
-import fold from 'eslint-plugin-fold';
+import esfold from 'eslint-plugin-esfold';
 
 export default [
   {
-    plugins: { fold },
-    rules: { 'fold/breaks': ['error'] },
+    plugins: { esfold },
+    rules: { 'esfold/breaks': ['error'] },
   },
 ];
 ```
@@ -59,12 +59,12 @@ Pair it with `@stylistic/comma-dangle` if you want a trailing comma.
 | `tabWidth` | `2` | Columns a tab advances to. Matters only for tab-indented files. |
 
 ```js
-import fold from 'eslint-plugin-fold';
+import esfold from 'eslint-plugin-esfold';
 
 export default [
   {
-    plugins: { fold },
-    rules: { 'fold/breaks': ['error', { maxWidth: 80, tabWidth: 2 }] },
+    plugins: { esfold },
+    rules: { 'esfold/breaks': ['error', { maxWidth: 80, tabWidth: 2 }] },
   },
 ];
 ```

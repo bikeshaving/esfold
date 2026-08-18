@@ -19,7 +19,7 @@ function configFor({
   sourceType = 'module',
 }: FoldOptions): LinterTypes.Config {
   return {
-    plugins: { fold },
+    plugins: { esfold: fold },
     // Flat config reports unused disable directives by default, and
     // `verifyAndFix` applies that fix — which deletes the comment. Every
     // `eslint-disable` in a corpus file is unused under a config running one
@@ -27,7 +27,7 @@ function configFor({
     // gets attributed here.
     linterOptions: { reportUnusedDisableDirectives: 'off' as const },
     rules: {
-      'fold/breaks': ['error', { maxWidth, tabWidth }] as LinterTypes.RuleEntry,
+      'esfold/breaks': ['error', { maxWidth, tabWidth }] as LinterTypes.RuleEntry,
     },
     languageOptions: {
       ...(ts ? { parser: tseslint.parser } : {}),
@@ -60,7 +60,7 @@ export function fold_(source: string, options: FoldOptions = {}): string {
 export function report(source: string, options: FoldOptions = {}) {
   return linter
     .verify(source, configFor(options))
-    .filter((message) => message.ruleId === 'fold/breaks');
+    .filter((message) => message.ruleId === 'esfold/breaks');
 }
 
 /**

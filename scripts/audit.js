@@ -38,9 +38,9 @@ const parse = (code) => {
 const linter = new Linter();
 
 const configFor = (maxWidth, tab) => ({
-  plugins: { fold },
+  plugins: { esfold: fold },
   linterOptions: { reportUnusedDisableDirectives: 'off' },
-  rules: { 'fold/breaks': ['error', { maxWidth, tabWidth: tab }] },
+  rules: { 'esfold/breaks': ['error', { maxWidth, tabWidth: tab }] },
   languageOptions: {
     parser: tseslint.parser,
     ecmaVersion: 'latest',
@@ -62,7 +62,7 @@ const run = (code, maxWidth, tab) =>
 function stuckLines(code, maxWidth, tab) {
   return linter
     .verify(code, configFor(maxWidth, tab))
-    .filter((message) => message.ruleId === 'fold/breaks')
+    .filter((message) => message.ruleId === 'esfold/breaks')
     .map((message) => `line ${message.line}: ${message.messageId}`);
 }
 
@@ -93,7 +93,7 @@ for (const repo of requireCorpus()) {
     let out;
     try {
       for (const message of linter.verify(code, configFor(width, tab))) {
-        if (message.ruleId !== 'fold/breaks') continue;
+        if (message.ruleId !== 'esfold/breaks') continue;
         edits++;
         kinds[message.messageId] = (kinds[message.messageId] ?? 0) + 1;
       }

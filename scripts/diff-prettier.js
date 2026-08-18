@@ -72,9 +72,9 @@ for (const repo of requireCorpus()) {
     let out;
     try {
       const result = linter.verifyAndFix(pretty, {
-        plugins: { fold },
+        plugins: { esfold: fold },
         linterOptions: { reportUnusedDisableDirectives: 'off' },
-        rules: { 'fold/breaks': ['error', { maxWidth: WIDTH, tabWidth }] },
+        rules: { 'esfold/breaks': ['error', { maxWidth: WIDTH, tabWidth }] },
         languageOptions: {
           parser: tseslint.parser,
           ecmaVersion: 'latest',
