@@ -15,12 +15,11 @@ interface TokenOptions {
 
 type Source = TSESLint.SourceCode;
 
-/** Whitespace between two tokens, and what a collapsed break becomes there. */
+/** Whitespace between two tokens where a newline may be inserted. */
 interface Gap {
   start: number;
   end: number;
   kind: 'item' | 'close' | 'same';
-  join?: string;
   // Operator gaps carry the other side here: a newline on either side counts.
   alt?: { start: number; end: number };
 }
@@ -266,21 +265,18 @@ const BINARY_PRECEDENCE = {
   '**': 14,
 };
 
-// `join` is what a collapsed break becomes: '' for bracket and dot gaps, ' '
-// for comma and operator gaps. Necessary gaps carry none.
-function gapAfter(sourceCode: Source, tokenOrNode: Node | Token, join = ''): Gap {
+function gapAfter(sourceCode: Source, tokenOrNode: Node | Token): Gap {
   const next = sourceCode.getTokenAfter(tokenOrNode, { includeComments: true });
-  return { start: tokenOrNode.range[1], end: next!.range[0], kind: 'item', join };
+  return { start: tokenOrNode.range[1], end: next!.range[0], kind: 'item' };
 }
 
 function gapBefore(
   sourceCode: Source,
   token: Node | Token,
   kind: Gap['kind'],
-  join = '',
 ): Gap {
   const prev = sourceCode.getTokenBefore(token, { includeComments: true });
-  return { start: prev!.range[1], end: token.range[0], kind, join };
+  return { start: prev!.range[1], end: token.range[0], kind };
 }
 
 // Narrows to the punctuator subtype, not to Token: "not this punctuator" must
@@ -317,13 +313,13 @@ function listGaps(
     // Comma-first layouts count as broken too: the newline may sit on either
     // side of the comma.
     if (comma === items[i]) {
-      gaps.push(gapAfter(sourceCode, comma!, ' '));
+      gaps.push(gapAfter(sourceCode, comma!));
     } else {
       const beforeComma = sourceCode.getTokenBefore(comma!, {
         includeComments: true,
       });
       gaps.push({
-        ...gapAfter(sourceCode, comma!, ' '),
+        ...gapAfter(sourceCode, comma!),
         alt: { start: beforeComma!.range[1], end: comma!.range[0] },
       });
     }
@@ -402,7 +398,7 @@ function arrowBodyGroup(sourceCode: Source, node: TSESTree.FunctionLike): Group 
   return {
     node,
     kind: 'arrow',
-    gaps: [gapAfter(sourceCode, arrow, ' ')],
+    gaps: [gapAfter(sourceCode, arrow)],
   };
 }
 
@@ -687,7 +683,7 @@ function forGroup(sourceCode: Source, node: TSESTree.ForStatement): Group | null
   return {
     node,
     range: [node.init.range[0], close.range[1]],
-    gaps: [gapAfter(sourceCode, semi1, ' '), gapAfter(sourceCode, semi2, ' ')],
+    gaps: [gapAfter(sourceCode, semi1), gapAfter(sourceCode, semi2)],
   };
 }
 
@@ -726,8 +722,8 @@ function ternaryGroup(
     node,
     kind: 'ternary',
     gaps: [
-      gapBefore(sourceCode, question, 'item', ' '),
-      gapBefore(sourceCode, colon, 'item', ' '),
+      gapBefore(sourceCode, question, 'item'),
+      gapBefore(sourceCode, colon, 'item'),
     ],
   };
 }
@@ -759,7 +755,7 @@ function jsxChildrenGroup(
     child.expression.value.trim() === '';
 
   const gaps: Gap[] = [
-    { start: open.range[1], end: content[0].range[0], kind: 'item', join: '' },
+    { start: open.range[1], end: content[0].range[0], kind: 'item' },
   ];
   for (let i = 1; i < content.length; i++) {
     if (isSpaceMarker(content[i])) continue;
@@ -767,14 +763,12 @@ function jsxChildrenGroup(
       start: content[i - 1].range[1],
       end: content[i].range[0],
       kind: 'item',
-      join: '',
     });
   }
   gaps.push({
     start: content[content.length - 1].range[1],
     end: close.range[0],
     kind: 'close',
-    join: '',
   });
   const nested = content.some(
     (child) => child.type === 'JSXElement' || child.type === 'JSXFragment',
@@ -797,9 +791,9 @@ function jsxGroup(
     items: attrs,
     gaps: [
       ...attrs.map((attr) =>
-        gapBefore(sourceCode, sourceCode.getFirstToken(attr)!, 'item', ' '),
+        gapBefore(sourceCode, sourceCode.getFirstToken(attr)!, 'item'),
       ),
-      gapBefore(sourceCode, closeToken, 'close', node.selfClosing ? ' ' : ''),
+      gapBefore(sourceCode, closeToken, 'close'),
     ],
   };
 }
@@ -867,7 +861,6 @@ function typeOperatorGroup(
       end: token.range[0],
       alt: { start: token.range[1], end: next!.range[0] },
       kind: 'item',
-      join: ' ',
     });
   }
   return { node, gaps, kind: 'operator' };
@@ -888,8 +881,8 @@ function conditionalTypeGroup(
     node,
     kind: 'ternary',
     gaps: [
-      gapBefore(sourceCode, question, 'item', ' '),
-      gapBefore(sourceCode, colon, 'item', ' '),
+      gapBefore(sourceCode, question, 'item'),
+      gapBefore(sourceCode, colon, 'item'),
     ],
   };
 }
@@ -910,7 +903,7 @@ function implementsGroup(
       filter: (t) => isPunct(t, ','),
     });
     if (!comma) return null;
-    gaps.push(gapAfter(sourceCode, comma, ' '));
+    gaps.push(gapAfter(sourceCode, comma));
   }
   return {
     node,
@@ -953,7 +946,7 @@ function colonGroup(
     node,
     kind: 'assign',
     fallback: true,
-    gaps: [gapAfter(sourceCode, colon, ' ')],
+    gaps: [gapAfter(sourceCode, colon)],
   };
 }
 
@@ -971,7 +964,7 @@ function assignmentGroup(
     node,
     kind: 'assign',
     fallback: true,
-    gaps: [gapAfter(sourceCode, operator, ' ')],
+    gaps: [gapAfter(sourceCode, operator)],
   };
 }
 
@@ -987,7 +980,7 @@ function declaratorGroup(
       filter: (t) => isPunct(t, ','),
     });
     if (!comma) return null;
-    gaps.push(gapAfter(sourceCode, comma, ' '));
+    gaps.push(gapAfter(sourceCode, comma));
   }
   return { node, gaps };
 }
@@ -1053,7 +1046,7 @@ function chainGroup(
     const after = { start: operator!.range[1], end: next!.range[0] };
     const main = operatorSide === 'before' ? before : after;
     const alt = operatorSide === 'before' ? after : before;
-    return { start: main.start, end: main.end, alt, kind: 'item', join: ' ' };
+    return { start: main.start, end: main.end, alt, kind: 'item' };
   });
   gaps.sort((a, b) => a.start - b.start);
   return { node, gaps, kind: 'operator' };
@@ -1321,7 +1314,7 @@ function collectGroups(sourceCode: Source, operatorSide: OperatorSide = 'after')
             node,
             kind: 'assign',
             fallback: true,
-            gaps: [gapAfter(sourceCode, operator, ' ')],
+            gaps: [gapAfter(sourceCode, operator)],
           });
         }
         break;
@@ -1743,7 +1736,7 @@ const breaks: TSESLint.RuleModule<MessageId, Options> = {
   meta: {
     type: 'layout',
     docs: {
-      description: 'Insert and remove line breaks to fit a maximum width.',
+      description: 'Insert the line breaks a file needs to fit a maximum width.',
     },
     fixable: 'whitespace',
     schema: [
