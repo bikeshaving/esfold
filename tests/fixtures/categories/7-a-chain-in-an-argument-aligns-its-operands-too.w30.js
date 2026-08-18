@@ -1,0 +1,1 @@
+call(alphaCondition && betaCondition && gammaCondition);

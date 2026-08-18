@@ -1,0 +1,1 @@
+		ok(argument, other);

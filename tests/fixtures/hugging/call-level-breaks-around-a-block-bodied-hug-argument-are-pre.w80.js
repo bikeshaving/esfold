@@ -1,0 +1,6 @@
+runTask(
+  taskName,
+  () => {
+    execute();
+  }
+);

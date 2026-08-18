@@ -1,0 +1,850 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`arrow > a-binary-body-likewise-lets-the-call-break 1`] = `promise.then(
+  (response) => response.first + response.second + third
+);
+`;
+
+exports[`arrow > a-block-body-hugs-the-brace-stays-on-the-call-line 1`] = `promise.then((response) => {
+  transformTheResponse(response, opts);
+});
+`;
+
+exports[`arrow > a-call-body-takes-the-break-after-the-arrow 1`] = `promise.then((response) =>
+  transformTheResponse(response, options, extra)
+);
+`;
+
+exports[`arrow > a-member-body-has-nowhere-to-put-a-break-so-the-call-breaks 1`] = `promise.then(
+  (response) => response.data.attributes.values.longName
+);
+`;
+
+exports[`arrow > a-ternary-body-takes-the-break-after-the-arrow 1`] = `items.mapIt((item) =>
+  item.enabled ? item.longNameValue : fallbackXY
+);
+`;
+
+exports[`arrow > an-object-body-hugs 1`] = `items.mapValues((item) => ({
+  identifier: item.id,
+  label: item.name
+}));
+`;
+
+exports[`arrow > the-arrow-break-is-idempotent 1`] = `promise.then((response) =>
+  transformTheResponse(response, options, extra)
+);
+`;
+
+exports[`arrow > the-arrow-break-is-idempotent-2 1`] = `promise.then((response) =>
+  transformTheResponse(response, options, extra)
+);
+`;
+
+exports[`categories > 10-destructuring-pattern-breaks-as-an-object-literal 1`] = `const {
+  alphaValue,
+  betaValue,
+  gammaValue,
+  deltaValue
+} = payload;
+`;
+
+exports[`categories > 11-ternary-breaks-before-and-before 1`] = `const label = isEnabled
+  ? enabledDisplayLabel
+  : disabledDisplayLabel;
+`;
+
+exports[`categories > 12-jsx-attributes-break-like-object-properties 1`] = `const el = <section
+  className={styles.wrapper}
+  onClick={handleClick}
+  role="main"
+/>;
+`;
+
+exports[`categories > 13-variable-declarator-list-breaks-after-the-comma 1`] = `let firstVariable = 1,
+  secondVariable = 2,
+  thirdVariable = 3;
+`;
+
+exports[`categories > 6-function-parameters-break-as-call-arguments 1`] = `function combine(
+  firstParameter,
+  secondParameter,
+  thirdParameter
+) {
+  return 1;
+}
+`;
+
+exports[`categories > 6-single-destructured-parameter-hugs 1`] = `function setup({
+  optionOne,
+  optionTwo,
+  optionThree
+}) {
+  return 1;
+}
+`;
+
+exports[`categories > 7-a-chain-in-an-argument-aligns-its-operands-too 1`] = `call(
+  alphaCondition &&
+  betaCondition &&
+  gammaCondition
+);
+`;
+
+exports[`categories > 7-a-hand-broken-condition-is-preserved 1`] = `if (
+  ready
+) {
+  act(); // go
+}
+`;
+
+exports[`categories > 7-long-if-condition-breaks-inside-the-parens 1`] = `if (
+  firstCondition &&
+  secondCondition &&
+  thirdCondition
+) {
+  act();
+}
+`;
+
+exports[`categories > 8-a-parenthesized-update-clause-does-not-truncate-the-for-gr 1`] = `for (let index = initialValue;
+  index < upperBound;
+  (index += stepSize)) {
+  act(index);
+}
+`;
+
+exports[`categories > 8-for-clauses-break-at-the-semicolons 1`] = `for (let index = initialValue;
+  index < upperBound;
+  index += stepSize) {
+  act(index);
+}
+`;
+
+exports[`categories > 9-import-specifier-list-breaks-as-an-object-literal 1`] = `import {
+  firstExport,
+  secondExport,
+  thirdExport
+} from './somewhere.js';
+`;
+
+exports[`categories > a-partially-broken-ternary-is-completed-not-joined 1`] = `const label = isEnabled
+  ? yes
+  : no;
+`;
+
+exports[`chains > a-braced-case-keeps-its-brace-on-the-case-line 1`] = `switch (kind) {
+  case A: {
+    handle();
+    break;
+  }
+}
+`;
+
+exports[`chains > a-braced-case-keeps-its-brace-on-the-case-line-2 1`] = `switch (kind) {
+  case A: {
+    handle();
+    break;
+  }
+}
+`;
+
+exports[`chains > a-parenthesized-chain-head-is-one-unit-never-broken-inside 1`] = `const result =
+  (alphaValue.betaProperty.gammaThing)
+  .deltaMethod()
+  .epsilonMethod();
+`;
+
+exports[`chains > a-parenthesized-sub-chain-can-still-break-on-its-own 1`] = `const r = (first.second).third();
+`;
+
+exports[`chains > already-formatted-block-body-chain-is-stable 1`] = `promise.then(() => {
+  return x;
+}).catch(() => {
+  return y;
+});
+`;
+
+exports[`chains > chain-break-is-preferred-over-breaking-the-last-call-argumen 1`] = `const n = builder
+  .withOne(alpha)
+  .withTwo(beta, gamma);
+`;
+
+exports[`chains > chain-containing-block-bodies-is-not-broken-at-the-chain-lev 1`] = `promise.then(() => {
+  return x;
+}).catch(() => {
+  return y;
+});
+`;
+
+exports[`chains > chain-without-block-bodies-breaks-before-every-dot 1`] = `const out = collection
+  .filter(isActive)
+  .map(toName)
+  .join(separator);
+`;
+
+exports[`chains > class-body-members-land-on-their-own-lines 1`] = `class Thing {
+  getA() {
+    return 1;
+  }
+}
+`;
+
+exports[`chains > empty-block-stays-inline 1`] = `function f() {}
+`;
+
+exports[`chains > one-liner-block-bodies-are-always-exploded 1`] = `function f() {
+  doFirst();
+  doSecond();
+}
+`;
+
+exports[`chains > optional-chaining-breaks-before-the 1`] = `const r = maybeThing
+  ?.first(alpha)
+  ?.second(beta)
+  ?.third(gamma);
+`;
+
+exports[`chains > single-method-call-is-not-a-chain-arguments-break-instead 1`] = `const v = registry.lookup(
+  firstArgument,
+  secondArgument
+);
+`;
+
+exports[`chains > switch-cases-land-on-their-own-lines 1`] = `switch (kind) {
+  case 1:
+    handleOne();
+    break;
+  default:
+    fallback();
+}
+`;
+
+exports[`chains > trailing-line-comment-already-separates-statements 1`] = `doFirst(); // note
+doSecond();
+`;
+
+exports[`chains > two-statements-on-one-line-are-separated 1`] = `doFirst();
+doSecond();
+`;
+
+exports[`consistency > a-fully-inline-group-that-fits-stays-inline 1`] = `foo(alpha, beta, gamma);
+`;
+
+exports[`consistency > a-group-with-a-blank-line-inside-is-frozen 1`] = `const options = {
+  timeout: 5000, retries: 3,
+
+  cache: true,
+};
+`;
+
+exports[`consistency > a-group-with-a-comment-inside-is-frozen 1`] = `foo(alpha, // why alpha
+  beta, gamma);
+`;
+
+exports[`consistency > a-hand-broken-block-body-chain-keeps-its-layout 1`] = `promise
+  .then(() => {
+    return x;
+  })
+  .catch(() => {
+    return y;
+  });
+`;
+
+exports[`consistency > a-hand-broken-group-that-would-fit-is-left-alone 1`] = `foo(
+  alpha,
+  beta
+);
+`;
+
+exports[`consistency > a-hugged-call-is-not-exploded-by-the-consistency-pass 1`] = `fetchData(url, {
+  method: 'GET',
+  cache: true
+});
+`;
+
+exports[`consistency > a-partially-broken-group-is-completed-not-joined 1`] = `foo(
+  alpha,
+  beta,
+  gamma
+);
+`;
+
+exports[`consistency > a-partially-broken-object-literal-is-completed 1`] = `const o = {
+  alpha: 1,
+  beta: 2,
+  gamma: 3
+};
+`;
+
+exports[`consistency > a-partially-broken-operator-chain-is-completed 1`] = `const ok = alpha &&
+  beta &&
+  gamma;
+`;
+
+exports[`consistency > an-author-break-at-an-out-of-scope-position-is-preserved 1`] = `const x =
+  foo(a, b);
+`;
+
+exports[`consistency > an-fp-pipeline-keeps-its-deliberate-layout 1`] = `const process = compose(
+  parseInput,
+  validate,
+  transform,
+  serialize
+);
+`;
+
+exports[`consistency > completion-respects-the-file-operator-side 1`] = `const ok = alpha
+  && beta
+  && gamma;
+`;
+
+exports[`edges > a-bom-is-preserved 1`] = `﻿const x = foo(
+  aaaaaaaaaaaaaaaaaaaa,
+  bbbbbbbbbbbbbbbbbbbb
+);
+`;
+
+exports[`edges > a-break-that-cannot-help-is-not-made 1`] = `function C() {
+  return (
+    <div>
+      <a href="https://example.com/a/very/long/path/that/exceeds/the/limit/by/a/lot/ok">
+        Open
+      </a>
+    </div>
+  );
+}
+`;
+
+exports[`edges > a-crlf-file-gets-crlf-breaks-not-mixed-endings 1`] = `function wrapper() {
+  const value = computeAll(
+    argumentOne,
+    argumentTwo
+  );
+}
+`;
+
+exports[`edges > a-hand-broken-layout-inside-a-template-is-left-alone 1`] = `const t = \`\${compute(
+  alpha,
+  beta
+)} tail\`;
+`;
+
+exports[`edges > a-mostly-lf-file-with-a-stray-crlf-stays-lf 1`] = `const a = 1;
+const b = 2;
+const c = 3;
+const value = computeAll(
+  argumentOne,
+  argumentTwo
+);
+`;
+
+exports[`edges > a-multiline-template-literal-is-not-treated-as-breakable-tex 1`] = `const t = \`line one
+line two \${value}
+line three\`;
+`;
+
+exports[`edges > a-single-atomic-argument-wider-than-the-limit-is-left-inline 1`] = `callSomething("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+`;
+
+exports[`edges > a-template-too-long-to-fix-is-silent-not-reported 1`] = `const t = \`xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\${value}\`;
+`;
+
+exports[`edges > a-tiny-maxwidth-breaks-what-it-can-and-stops 1`] = `foo(
+  a,
+  b
+);
+`;
+
+exports[`edges > an-lf-file-stays-lf 1`] = `function wrapper() {
+  const value = computeAll(
+    argumentOne,
+    argumentTwo
+  );
+}
+`;
+
+exports[`edges > an-unbreakable-over-width-line-is-left-alone-and-silent 1`] = `const s = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+`;
+
+exports[`edges > and-a-single-argument-that-can-itself-break-still-breaks 1`] = `callSomething(
+  inner(alphaValue, betaValue, gammaVal)
+);
+`;
+
+exports[`edges > astral-characters-count-as-one-column-each 1`] = `ok("🎉🎉🎉🎉");
+`;
+
+exports[`edges > but-two-items-still-break-even-when-one-stays-over-the-limit 1`] = `callSomething(
+  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+  second
+);
+`;
+
+exports[`edges > empty-argument-and-element-lists-are-untouched 1`] = `noArgs();
+const e = [];
+const o = {};
+`;
+
+exports[`edges > never-folds-inside-a-template-literal 1`] = `report(
+  \`Unexpected text \${span.slice(index, match.index).trim()}\`,
+  spans
+);
+`;
+
+exports[`edges > sparse-array-elision-is-never-broken 1`] = `const sparse = [1, , 3, , 5];
+`;
+
+exports[`edges > tabs-count-as-four-columns-when-measuring 1`] = `		ok(
+		  argument,
+		  other
+		);
+`;
+
+exports[`groups > array-literal-breaks-one-element-per-line 1`] = `const xs = [
+  firstElement,
+  secondElement,
+  thirdElement
+];
+`;
+
+exports[`groups > block-comment-in-a-gap-moves-with-the-following-item 1`] = `foo(
+  firstArgument,
+  /* why */ secondArgument,
+  thirdArgument
+);
+`;
+
+exports[`groups > infers-tab-indentation 1`] = `function wrapper() {
+	const value = computeAll(
+		argumentOne,
+		argumentTwo
+	);
+}
+`;
+
+exports[`groups > new-expression-arguments-break-like-call-arguments 1`] = `const it = new ThingBuilder(
+  optionOne,
+  optionTwo,
+  optionThree
+);
+`;
+
+exports[`groups > object-literal-breaks-one-property-per-line 1`] = `const o = {
+  alpha: 1,
+  beta: 2,
+  gamma: 3,
+  delta: 4
+};
+`;
+
+exports[`groups > outermost-group-breaks-first 1`] = `foo(
+  bar(x, y),
+  baz(a, b),
+  qux(m, n)
+);
+`;
+
+exports[`groups > over-width-call-breaks-one-argument-per-line 1`] = `const result = computeThing(
+  firstArgument,
+  secondArgument
+);
+`;
+
+exports[`groups > parenthesized-first-argument-does-not-confuse-the-open-paren 1`] = `foo(
+  (alpha + beta),
+  gammaValueLong,
+  deltaValueLong
+);
+`;
+
+exports[`groups > partially-broken-group-is-fully-broken-all-or-nothing 1`] = `foo(
+  aaaaaaaaaaaaaaaa,
+  bbbbbbbbbbbbbbbb,
+  cccccccccccccccc
+);
+`;
+
+exports[`groups > recurses-into-inner-groups-only-when-still-too-long 1`] = `foo(
+  bar(
+    xxxxxxxxxxxxxxxxxxxxxxxxx,
+    yyyyyyyyyyyyyyyyyyyyyyyy
+  )
+);
+`;
+
+exports[`groups > respects-existing-indentation-as-the-base 1`] = `function wrapper() {
+  const value = computeAll(
+    argumentOne,
+    argumentTwo
+  );
+}
+`;
+
+exports[`groups > short-lines-are-untouched 1`] = `const x = foo(a, b);
+`;
+
+exports[`groups > trailing-comma-group-breaks-after-the-trailing-comma 1`] = `const xs = [
+  firstElement,
+  secondElement,
+  thirdElement,
+];
+`;
+
+exports[`groups > unbreakable-long-string-is-left-entirely-alone 1`] = `const s = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+`;
+
+exports[`hugging > an-author-broken-un-hugged-form-is-preserved 1`] = `fetchData(
+  url,
+  { method: 'GET', cache: true }
+);
+`;
+
+exports[`hugging > an-expression-bodied-arrow-does-not-hug 1`] = `const p = new Promise(
+  (resolve) => (r.onstop = () => resolve(undefined))
+);
+`;
+
+exports[`hugging > an-object-bodied-arrow-still-hugs 1`] = `items.map((item) => ({
+  identifier: item.id,
+  label: item.name
+}));
+`;
+
+exports[`hugging > call-level-breaks-around-a-block-bodied-hug-argument-are-pre 1`] = `runTask(
+  taskName,
+  () => {
+    execute();
+  }
+);
+`;
+
+exports[`hugging > first-position-data-array-hugs-tail-stays-on-the-closing-lin 1`] = `map([
+  veryLongElement1,
+  veryLongElement2,
+  veryLongElement3
+], transformFn);
+`;
+
+exports[`hugging > huggable-argument-in-middle-position-disables-hugging 1`] = `configure(
+  first,
+  { alpha: 1, beta: 2 },
+  lastArgument
+);
+`;
+
+exports[`hugging > last-position-options-object-hugs 1`] = `fetchData(requestUrl, {
+  method: 'GET',
+  cache: true,
+  retries: 3
+});
+`;
+
+exports[`hugging > single-complex-argument-never-breaks-at-the-call-level 1`] = `processData({
+  field1: value1,
+  field2: value2,
+  field3: value3
+});
+`;
+
+exports[`hugging > two-huggable-arguments-disables-hugging-the-call-breaks-norm 1`] = `merge(
+  { alpha: 1, beta: 2 },
+  { gamma: 3, delta: 4 }
+);
+`;
+
+exports[`operators > a-comma-first-group-with-a-dangling-comma-is-already-consist 1`] = `const o = {
+  a: 1
+  ,b: 2
+  ,};
+`;
+
+exports[`operators > a-file-that-already-breaks-before-operators-keeps-that-side 1`] = `const existing = someCondition
+  && otherCondition;
+const all = alphaCondition
+  || betaCondition
+  || gammaCondition;
+`;
+
+exports[`operators > a-lone-assignment-is-not-a-break-candidate-the-rhs-breaks-in 1`] = `target = computeSomething(
+  firstArgument,
+  secondArgument
+);
+`;
+
+exports[`operators > additive-splits-before-multiplicative-descends 1`] = `const total = firstFactor *
+  secondFactor +
+  thirdFactor * fourthFactor;
+`;
+
+exports[`operators > additive-splits-before-multiplicative-descends-2 1`] = `const total = firstFactor * secondFactor +
+  thirdFactor * fourthFactor;
+`;
+
+exports[`operators > an-existing-break-is-preserved-on-whichever-side-holds-it 1`] = `const ok = alpha
+  && beta;
+`;
+
+exports[`operators > an-existing-break-is-preserved-on-whichever-side-holds-it-2 1`] = `const ok = alpha &&
+  beta;
+`;
+
+exports[`operators > an-existing-break-on-the-non-preferred-side-is-left-alone 1`] = `const check = someVeryLongConditionName
+  && anotherVeryLongConditionName;
+`;
+
+exports[`operators > assignment-chain-breaks-at-the-s 1`] = `firstTarget =
+  secondTarget =
+  thirdTarget =
+  someSharedDefaultValue;
+`;
+
+exports[`operators > breaks-at-before-touching 1`] = `const check = condition1 && condition2 ||
+  condition3 && condition4;
+`;
+
+exports[`operators > comma-first-breaks-are-never-re-broken-or-moved 1`] = `computeAll(
+  firstLongArgument
+  , secondLongArgument
+  , thirdLongArgument
+);
+`;
+
+exports[`operators > descends-to-the-next-precedence-level-only-when-still-too-lo 1`] = `const check =
+  firstLongCondition &&
+  secondLongCondition ||
+  thirdLongCondition &&
+  fourthLongCondition;
+`;
+
+exports[`operators > equal-precedence-run-breaks-at-every-operator 1`] = `const all = alphaCondition ||
+  betaCondition ||
+  gammaCondition;
+`;
+
+exports[`operators > fallback-with-no-signal-is-break-after 1`] = `const all = alphaCondition ||
+  betaCondition ||
+  gammaCondition;
+`;
+
+exports[`operators > operator-chain-is-preferred-over-an-inner-call-group-outermo 1`] = `const ok = validate(inputData) &&
+  sanitize(inputData, options);
+`;
+
+exports[`operators > parenthesized-operand-stops-the-chain 1`] = `const v = (alphaCondition || betaCondition) &&
+  (gammaCondition || deltaCondition);
+`;
+
+exports[`operators > trailing-dot-chain-counts-as-broken-never-re-broken-or-moved 1`] = `const out = collection.
+  filter(isActive).
+  map(toName).
+  join(separator);
+`;
+
+exports[`operators > trailing-dot-chain-counts-as-broken-never-re-broken-or-moved-2 1`] = `const out = xs.
+  filter(f).
+  map(g);
+`;
+
+exports[`parity > a-call-with-a-trailing-function-keeps-the-layout-it-was-give 1`] = `promise.then(() =>
+  computeSomething(value),
+);
+`;
+
+exports[`parity > a-compound-assignment-is-not-a-peer-in-an-chain 1`] = `someObject.longPropertyName.value =
+  anotherObject.otherProperty.value += delta;
+`;
+
+exports[`parity > a-compound-assignment-is-not-a-peer-in-an-chain-2 1`] = `someObject.longPropertyName.value =
+  anotherObject.otherProperty.value =
+  delta;
+`;
+
+exports[`parity > a-gets-the-same-last-resort-break-as-an 1`] = `const o = {
+  someKeyName:
+    someObject.deeply.nested.property.valueHere
+};
+`;
+
+exports[`parity > a-hugged-function-signature-is-never-broken 1`] = `it("should ignore X-Forwarded-Proto if socket addr is not trusted", function (done) {
+  run();
+});
+`;
+
+exports[`parity > a-leading-semicolon-stays-with-the-statement-it-guards 1`] = `function f() {
+  const a = 1
+  ;(node).inPattern = true
+}
+`;
+
+exports[`parity > a-line-pushed-over-only-by-a-trailing-comment-is-left-alone 1`] = `const headers = { AuThOrIzAtIoN: 'Bearer 1234' }; // wonky casing on purpose
+`;
+
+exports[`parity > a-lone-import-specifier-stays-inline-however-long-the-line 1`] = `import { transformStyle } from '../../../compiler-dom/src/transforms/transformStyle';
+`;
+
+exports[`parity > a-shorthand-method-does-not-borrow-the-previous-property-s-c 1`] = `export default test({
+  html: "<div>content 0 3 3</div><div>content 1 2 2</div><div>content 2</div>",
+
+  test({ assert, target }) {
+    assert.equal(target, null);
+  },
+});
+`;
+
+exports[`parity > and-not-when-the-value-would-not-fit-anyway 1`] = `const s = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+`;
+
+exports[`parity > but-not-when-the-value-can-break-on-its-own 1`] = `const resultValue = computeSomething(
+  alphaArgument,
+  betaArgument,
+  gamma
+);
+`;
+
+exports[`parity > but-not-when-the-value-can-break-on-its-own-2 1`] = `const messageText = isEnabled
+  ? enabledDisplayLabel
+  : disabledLabelHere;
+`;
+
+exports[`parity > code-that-is-itself-too-long-still-breaks-comment-or-not 1`] = `const headers = computeAll(
+  firstArgumentName,
+  secondArgumentName,
+  third
+); // c
+`;
+
+exports[`parity > nothing-inside-a-template-literal-is-folded-ever 1`] = `report(
+  \`Unexpected text \${span.slice(index, match.index).trim()}\`,
+  spans
+);
+`;
+
+exports[`parity > ordinary-statement-boundaries-still-break 1`] = `doFirst();
+doSecond();
+`;
+
+exports[`parity > the-assignment-break-rescues-a-value-nothing-else-can-split 1`] = `const resultValue =
+  someObject.deeply.nested.property.chain.valueHere;
+`;
+
+exports[`parity > two-or-more-specifiers-break-normally 1`] = `import {
+  transformStyle,
+  transformOther
+} from '../../../compiler-dom/x';
+`;
+
+exports[`staircase > a-chain-in-a-condition-aligns-its-operands 1`] = `if (
+  firstCondition &&
+  secondCondition &&
+  third
+) {
+  a();
+}
+`;
+
+exports[`staircase > a-chain-in-an-argument-aligns-its-operands 1`] = `call(
+  alphaCondition &&
+  betaCondition &&
+  gammaCondition
+);
+`;
+
+exports[`staircase > a-chain-that-begins-a-statement-still-indents-its-continuati 1`] = `firstTarget =
+  secondTarget =
+  thirdTarget =
+  someSharedDefault;
+`;
+
+exports[`staircase > a-ternary-in-an-argument-aligns-its-branches 1`] = `call(
+  someCondition
+  ? alphaResultValue
+  : betaResultValue
+);
+`;
+
+exports[`staircase > a-ternary-that-begins-a-statement-still-indents-its-branches 1`] = `const label = isEnabled
+  ? enabledLabel
+  : disabledLabel;
+`;
+
+exports[`staircase > bracketed-groups-still-nest-normally 1`] = `outer(
+  inner(
+    alphaValue,
+    betaValue
+  ),
+  gammaValue
+);
+`;
+
+exports[`staircase > ternaries-chained-through-the-alternate-share-one-level 1`] = `const name = typeof tag === "function"
+  ? tag.name
+  : typeof tag === "string"
+  ? tag
+  : String(tag);
+`;
+
+exports[`types > a-conditional-type-breaks-like-a-ternary 1`] = `type Cond<T> = T extends StringLikeThing
+  ? TrueBranchType
+  : FalseBranch;
+`;
+
+exports[`types > a-tuple-type-breaks-like-an-array 1`] = `type Tup = [
+  FirstElementType,
+  SecondElementType,
+  ThirdElementTypeHere
+];
+`;
+
+exports[`types > a-type-alias-with-nothing-breakable-falls-back-to-the 1`] = `type Alias =
+  SomeVeryLongImportedTypeNameFromElsewhere;
+`;
+
+exports[`types > a-type-literal-breaks-like-an-object-literal 1`] = `type Options = {
+  timeout: number;
+  retries: number;
+  cacheEnabled: boolean
+};
+`;
+
+exports[`types > an-interface-body-breaks-the-same-way 1`] = `interface Iface {
+  alphaValue: string;
+  betaValue: number;
+  gamma: boolean
+}
+`;
+
+exports[`types > function-type-parameters-break-like-a-parameter-list 1`] = `type Fn = (
+  alphaParam: string,
+  betaParam: number
+) => ReturnHere;
+`;
+
+exports[`types > type-arguments-break-like-an-argument-list 1`] = `util.assertEqual<
+  UnionedType,
+  { a: string; b?: string | undefined }
+>(value);
+`;
+
+exports[`types > type-parameters-break-the-same-way 1`] = `function convert<
+  TInput extends object,
+  TOutput extends object
+>(x: TInput) {}
+`;
+
+exports[`types > type-syntax-that-fits-is-left-alone 1`] = `type Small = { a: number };
+type U = A | B;
+function f<T>(x: T): T {
+  return x;
+}
+`;
+
+exports[`types > unions-and-intersections-break-at-the-operator 1`] = `type Handler = FirstHandlerType
+  | SecondHandlerType
+  | ThirdHandlerKind;
+`;
+
+exports[`types > unions-and-intersections-break-at-the-operator-2 1`] = `type Both = FirstMixinType
+  & SecondMixinType
+  & ThirdMixinTypeHere;
+`;

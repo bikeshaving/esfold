@@ -1,0 +1,3 @@
+promise.then(() =>
+  computeSomething(value),
+);

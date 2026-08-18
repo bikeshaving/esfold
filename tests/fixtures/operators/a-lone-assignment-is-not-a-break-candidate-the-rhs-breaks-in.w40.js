@@ -1,0 +1,1 @@
+target = computeSomething(firstArgument, secondArgument);

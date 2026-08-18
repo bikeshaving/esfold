@@ -1,0 +1,1 @@
+firstTarget = secondTarget = thirdTarget = someSharedDefault;

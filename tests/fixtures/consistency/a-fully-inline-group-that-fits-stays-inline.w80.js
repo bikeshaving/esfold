@@ -1,0 +1,1 @@
+foo(alpha, beta, gamma);

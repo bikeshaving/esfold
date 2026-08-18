@@ -1,0 +1,3 @@
+computeAll(firstLongArgument
+  , secondLongArgument
+  , thirdLongArgument);

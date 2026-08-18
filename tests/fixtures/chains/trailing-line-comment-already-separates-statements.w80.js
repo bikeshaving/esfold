@@ -1,0 +1,2 @@
+doFirst(); // note
+doSecond();
