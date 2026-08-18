@@ -7,12 +7,14 @@ const linter = new Linter();
 
 export interface FoldOptions {
   maxWidth?: number;
+  tabWidth?: number;
   ts?: boolean;
   sourceType?: 'module' | 'commonjs';
 }
 
 function configFor({
   maxWidth = 80,
+  tabWidth = 2,
   ts = false,
   sourceType = 'module',
 }: FoldOptions): LinterTypes.Config {
@@ -24,7 +26,9 @@ function configFor({
     // rule, so leaving this on makes ESLint edit the source and the change
     // gets attributed here.
     linterOptions: { reportUnusedDisableDirectives: 'off' as const },
-    rules: { 'fold/breaks': ['error', { maxWidth }] as LinterTypes.RuleEntry },
+    rules: {
+      'fold/breaks': ['error', { maxWidth, tabWidth }] as LinterTypes.RuleEntry,
+    },
     languageOptions: {
       ...(ts ? { parser: tseslint.parser } : {}),
       ecmaVersion: 'latest' as const,

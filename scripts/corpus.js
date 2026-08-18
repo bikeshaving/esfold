@@ -91,6 +91,40 @@ export function sample(files, max) {
   return files.filter((_, i) => i % step === 0).slice(0, max);
 }
 
+/**
+ * The tab width the repository views its tabs at. Not inferable from source —
+ * a tab's width is a viewer preference — so a wrong value silently changes
+ * which lines the audit considers over width.
+ */
+export function tabWidth(dir) {
+  const read = (name) => {
+    try {
+      return readFileSync(join(dir, name), 'utf8');
+    } catch {
+      return null;
+    }
+  };
+  for (const name of [
+    '.prettierrc', '.prettierrc.json', '.prettierrc.json5', '.prettierrc.yaml',
+    '.prettierrc.yml', '.prettierrc.js', '.prettierrc.mjs',
+    'prettier.config.js', 'prettier.config.mjs',
+  ]) {
+    const match = read(name)?.match(/"?tabWidth"?\s*:\s*(\d+)/);
+    if (match) return Number(match[1]);
+  }
+  // editorconfig: tab_width wins, else indent_size when indenting with tabs.
+  const editorconfig = read('.editorconfig');
+  if (editorconfig) {
+    const tab = editorconfig.match(/tab_width\s*=\s*(\d+)/);
+    if (tab) return Number(tab[1]);
+    if (/indent_style\s*=\s*tab/.test(editorconfig)) {
+      const size = editorconfig.match(/indent_size\s*=\s*(\d+)/);
+      if (size) return Number(size[1]);
+    }
+  }
+  return 2;
+}
+
 /** The width the repository itself is formatted to, so churn means something. */
 export function printWidth(dir) {
   const read = (name) => {

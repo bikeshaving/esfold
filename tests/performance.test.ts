@@ -1,5 +1,5 @@
 import { test, expect } from '@b9g/libuild/test';
-import { fold } from './fold.js';
+import { report } from './fold.js';
 
 /**
  * A guard against reintroducing a superlinear scan. The rule runs on every
@@ -9,6 +9,10 @@ import { fold } from './fold.js';
  * The size separates two regimes rather than measuring absolute speed: on
  * this input, scanning every candidate group per over-width line took ~4.9s
  * where the gap index takes well under one second.
+ *
+ * Measured with `report`, one pass. `fold` would run the whole fix loop, so
+ * the number would be ten passes of this file and the threshold would say
+ * more about the loop than about the scan.
  *
  * Timed as the best of several runs. Test files run in parallel and this one
  * shares a machine with the corpus suites, so a single timing measures
@@ -23,13 +27,13 @@ test('a large file where every line needs breaking stays fast', () => {
   }
 
   let best = Infinity;
-  let output = '';
+  let reports: unknown[] = [];
   for (let attempt = 0; attempt < 3; attempt++) {
     const started = Date.now();
-    output = fold(code, { maxWidth: 80 });
+    reports = report(code, { maxWidth: 80 });
     best = Math.min(best, Date.now() - started);
   }
 
-  expect(output).not.toBe(code);
-  expect(best).toBeLessThan(8000);
+  expect(reports.length).toBeGreaterThan(2000);
+  expect(best).toBeLessThan(4000);
 });

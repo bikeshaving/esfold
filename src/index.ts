@@ -72,15 +72,17 @@ interface VLine {
 
 type OperatorSide = 'before' | 'after';
 
-// Mirrors @stylistic/max-len's computeLineLength, quirks included; the two
-// disagreeing is worse. 2, not 4 — at 4 Fold reflowed tab-indented files.
-const TAB_WIDTH = 2;
+// 2 matches Prettier's default. The one input Fold cannot read off the file:
+// a tab's width is a viewer preference, not a property of the source.
+const DEFAULT_TAB_WIDTH = 2;
 
-function measureLine(text: string): number {
+// Mirrors @stylistic/max-len's computeLineLength, quirks included; the two
+// disagreeing about which lines are too long is worse than sharing a quirk.
+function measureLine(text: string, tabWidth: number): number {
   let extra = 0;
   for (let i = 0; i < text.length; i++) {
     if (text[i] !== '\t') continue;
-    extra += TAB_WIDTH - ((i + extra) % TAB_WIDTH) - 1;
+    extra += tabWidth - ((i + extra) % tabWidth) - 1;
   }
   let codePoints = 0;
   for (const _ of text) codePoints++;
@@ -1388,8 +1390,8 @@ function physicalLines(text: string): VLine[] {
   return lines;
 }
 
-function lineWidth(text: string, vline: VLine): number {
-  return measureLine(vline.indent + text.slice(vline.start, vline.end));
+function lineWidth(text: string, vline: VLine, tabWidth: number): number {
+  return measureLine(vline.indent + text.slice(vline.start, vline.end), tabWidth);
 }
 
 function lineIndent(text: string, vline: VLine): string {
@@ -1433,21 +1435,30 @@ function inferOperatorSide(sourceCode: Source): OperatorSide {
 
 // Advances one character at a time; re-measuring the whole prefix at each
 // step would be quadratic in the overflow column.
-function overflowStart(text: string, vline: VLine, maxWidth: number): number {
-  const indentWidth = measureLine(vline.indent);
+function overflowStart(
+  text: string,
+  vline: VLine,
+  maxWidth: number,
+  tabWidth: number,
+): number {
+  const indentWidth = measureLine(vline.indent, tabWidth);
   if (indentWidth > maxWidth) return vline.start;
   let width = indentWidth;
   let offset = vline.start;
   for (const char of text.slice(vline.start, vline.end)) {
-    width += char === '\t' ? TAB_WIDTH - (width % TAB_WIDTH) : 1;
+    width += char === '\t' ? tabWidth - (width % tabWidth) : 1;
     if (width > maxWidth) return offset;
     offset += char.length;
   }
   return vline.end;
 }
 
-function format(sourceCode: Source, options: { maxWidth?: number } = {}): Edit[] {
+function format(
+  sourceCode: Source,
+  options: { maxWidth?: number; tabWidth?: number } = {},
+): Edit[] {
   const maxWidth = options.maxWidth ?? DEFAULT_MAX_WIDTH;
+  const tabWidth = options.tabWidth ?? DEFAULT_TAB_WIDTH;
   const text = sourceCode.text;
 
   let inferred = indentCache.get(sourceCode);
@@ -1612,7 +1623,7 @@ function format(sourceCode: Source, options: { maxWidth?: number } = {}): Edit[]
       if (start < vl.start || start >= vl.end) continue;
       if (end < vl.end) continue; // not the tail of the line
       const code = vl.indent + text.slice(vl.start, start).trimEnd();
-      if (measureLine(code) <= maxWidth) return true;
+      if (measureLine(code, tabWidth) <= maxWidth) return true;
     }
     return false;
   }
@@ -1621,11 +1632,11 @@ function format(sourceCode: Source, options: { maxWidth?: number } = {}): Edit[]
   // advance; breakGroup consumes a group's gaps, so this ends by exhaustion.
   for (let cursor = 0; cursor < vlines.length; ) {
     const vl = vlines[cursor];
-    if (lineWidth(text, vl) <= maxWidth || overflowIsTrailingComment(vl)) {
+    if (lineWidth(text, vl, tabWidth) <= maxWidth || overflowIsTrailingComment(vl)) {
       cursor++;
       continue;
     }
-    const overflow = overflowStart(text, vl, maxWidth);
+    const overflow = overflowStart(text, vl, maxWidth, tabWidth);
     // A lone atomic item already too wide cannot be helped: it lands on its
     // own line at the width it had. Two or more items do shorten the line.
     const cannotHelp = (group: Group) => {
@@ -1646,7 +1657,7 @@ function format(sourceCode: Source, options: { maxWidth?: number } = {}): Edit[]
       );
       if (hasInnerCandidate) return false;
       const indent = lineIndent(text, vl) + unit;
-      return measureLine(indent + text.slice(itemStart, itemEnd)) > maxWidth;
+      return measureLine(indent + text.slice(itemStart, itemEnd), tabWidth) > maxWidth;
     };
 
     const onLine = [...groupsOnLine(vl)].filter(
@@ -1674,8 +1685,9 @@ function format(sourceCode: Source, options: { maxWidth?: number } = {}): Edit[]
             const head = text.slice(vl.start, gap.start).trimEnd();
             const tail = text.slice(gap.end, vl.end);
             return (
-              measureLine(vl.indent + head) <= maxWidth &&
-              measureLine(lineIndent(text, vl) + unit + tail) <= maxWidth
+              measureLine(vl.indent + head, tabWidth) <= maxWidth &&
+              measureLine(lineIndent(text, vl) + unit + tail, tabWidth) <=
+                maxWidth
             );
           }),
       );
@@ -1725,7 +1737,7 @@ function format(sourceCode: Source, options: { maxWidth?: number } = {}): Edit[]
   return edits;
 }
 
-type Options = [{ maxWidth?: number }?];
+type Options = [{ maxWidth?: number; tabWidth?: number }?];
 
 const breaks: TSESLint.RuleModule<MessageId, Options> = {
   meta: {
@@ -1739,6 +1751,7 @@ const breaks: TSESLint.RuleModule<MessageId, Options> = {
         type: 'object',
         properties: {
           maxWidth: { type: 'integer', minimum: 1 },
+          tabWidth: { type: 'integer', minimum: 1 },
         },
         additionalProperties: false,
       },
@@ -1749,15 +1762,18 @@ const breaks: TSESLint.RuleModule<MessageId, Options> = {
       inconsistentGroup:
         'This group is partially broken; break every element or none.',
     },
-    defaultOptions: [{ maxWidth: DEFAULT_MAX_WIDTH }],
+    defaultOptions: [
+      { maxWidth: DEFAULT_MAX_WIDTH, tabWidth: DEFAULT_TAB_WIDTH },
+    ],
   },
 
   create(context) {
     const maxWidth = context.options[0]?.maxWidth ?? DEFAULT_MAX_WIDTH;
+    const tabWidth = context.options[0]?.tabWidth ?? DEFAULT_TAB_WIDTH;
 
     return {
       'Program:exit'() {
-        for (const edit of format(context.sourceCode, { maxWidth })) {
+        for (const edit of format(context.sourceCode, { maxWidth, tabWidth })) {
           context.report({
             loc: edit.loc,
             messageId: edit.messageId,

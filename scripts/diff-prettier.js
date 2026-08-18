@@ -48,11 +48,22 @@ for (const repo of requireCorpus()) {
       continue;
     }
 
+    // Prettier's own resolver, not a scrape: it reads every config format
+    // and .editorconfig. Both sides must agree on tab settings, or the
+    // comparison silently stops exercising tabs — Prettier defaults to
+    // spaces, so its output would arrive space-indented whatever the repo
+    // actually uses.
+    const config = (await prettier.resolveConfig(file, { editorconfig: true })) ?? {};
+    const useTabs = config.useTabs ?? false;
+    const tabWidth = config.tabWidth ?? 2;
+
     let pretty;
     try {
       pretty = await prettier.format(raw, {
         parser: /\.tsx?$/.test(file) ? 'typescript' : 'babel',
         printWidth: WIDTH,
+        useTabs,
+        tabWidth,
       });
     } catch {
       continue; // Prettier could not parse it; not our business
@@ -63,7 +74,7 @@ for (const repo of requireCorpus()) {
       const result = linter.verifyAndFix(pretty, {
         plugins: { fold },
         linterOptions: { reportUnusedDisableDirectives: 'off' },
-        rules: { 'fold/breaks': ['error', { maxWidth: WIDTH }] },
+        rules: { 'fold/breaks': ['error', { maxWidth: WIDTH, tabWidth }] },
         languageOptions: {
           parser: tseslint.parser,
           ecmaVersion: 'latest',

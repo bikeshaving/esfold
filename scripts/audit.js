@@ -21,7 +21,7 @@ import { Linter } from 'eslint';
 import tseslint from 'typescript-eslint';
 import fold from '../src/index.ts';
 import {
-  CORPUS, PARSE_OPTIONS, printWidth, requireCorpus, sample, sourceFiles,
+  CORPUS, PARSE_OPTIONS, printWidth, requireCorpus, sample, sourceFiles, tabWidth,
   stripLocations,
 } from './corpus.js';
 
@@ -37,10 +37,10 @@ const parse = (code) => {
 
 const linter = new Linter();
 
-const configFor = (maxWidth) => ({
+const configFor = (maxWidth, tab) => ({
   plugins: { fold },
   linterOptions: { reportUnusedDisableDirectives: 'off' },
-  rules: { 'fold/breaks': ['error', { maxWidth }] },
+  rules: { 'fold/breaks': ['error', { maxWidth, tabWidth: tab }] },
   languageOptions: {
     parser: tseslint.parser,
     ecmaVersion: 'latest',
@@ -49,7 +49,8 @@ const configFor = (maxWidth) => ({
   },
 });
 
-const run = (code, maxWidth) => linter.verifyAndFix(code, configFor(maxWidth));
+const run = (code, maxWidth, tab) =>
+  linter.verifyAndFix(code, configFor(maxWidth, tab));
 
 /**
  * Over-width lines that still hold a break Fold could have taken. The rule
@@ -58,9 +59,9 @@ const run = (code, maxWidth) => linter.verifyAndFix(code, configFor(maxWidth));
  * taken. Lines with no candidate at all, or whose only item is atomic and
  * already too wide, report nothing and are correctly ignored.
  */
-function stuckLines(code, maxWidth) {
+function stuckLines(code, maxWidth, tab) {
   return linter
-    .verify(code, configFor(maxWidth))
+    .verify(code, configFor(maxWidth, tab))
     .filter((message) => message.ruleId === 'fold/breaks')
     .map((message) => `line ${message.line}: ${message.messageId}`);
 }
@@ -70,6 +71,7 @@ const totals = { files: 0, changed: 0, crash: 0, ast: 0, idem: 0, stuck: 0, line
 for (const repo of requireCorpus()) {
   const dir = join(CORPUS, repo);
   const width = printWidth(dir);
+  const tab = tabWidth(dir);
   const files = sample(sourceFiles(dir), MAX_PER_REPO);
 
   let n = 0, changed = 0, crash = 0, astBad = 0, idem = 0, stuck = 0, lines = 0, edits = 0;
@@ -90,12 +92,12 @@ for (const repo of requireCorpus()) {
 
     let out;
     try {
-      for (const message of linter.verify(code, configFor(width))) {
+      for (const message of linter.verify(code, configFor(width, tab))) {
         if (message.ruleId !== 'fold/breaks') continue;
         edits++;
         kinds[message.messageId] = (kinds[message.messageId] ?? 0) + 1;
       }
-      out = run(code, width).output;
+      out = run(code, width, tab).output;
     } catch (error) {
       crash++;
       if (notes.length < 2) notes.push(`CRASH ${file.slice(dir.length + 1)}: ${error.message}`);
@@ -110,7 +112,7 @@ for (const repo of requireCorpus()) {
       continue;
     }
     try {
-      const twice = run(out, width).output;
+      const twice = run(out, width, tab).output;
       if (twice !== out) {
         idem++;
         if (notes.length < 2) notes.push(`NOT IDEMPOTENT ${file.slice(dir.length + 1)}`);
@@ -118,7 +120,7 @@ for (const repo of requireCorpus()) {
     } catch {
       idem++;
     }
-    const s = stuckLines(out, width);
+    const s = stuckLines(out, width, tab);
     if (s.length) {
       stuck += s.length;
       if (notes.length < 2) notes.push(`STUCK ${file.slice(dir.length + 1)}: ${s[0]}`);
@@ -131,7 +133,7 @@ for (const repo of requireCorpus()) {
 
   const flag = crash || astBad || idem || stuck ? ' ***' : '';
   console.log(
-    `${repo.padEnd(10)} w${String(width).padEnd(4)} ${String(n).padStart(4)} files ` +
+    `${repo.padEnd(10)} w${String(width).padEnd(3)}t${String(tab).padEnd(2)} ${String(n).padStart(4)} files ` +
       `${String(lines).padStart(6)} lines | touched ${String(Math.round((changed / (n || 1)) * 100)).padStart(3)}% ` +
       `${String(edits).padStart(5)} edits ` +
       `(width ${kinds.overWidth ?? 0}, consistency ${kinds.inconsistentGroup ?? 0}, necessary ${kinds.necessaryBreak ?? 0})` +
