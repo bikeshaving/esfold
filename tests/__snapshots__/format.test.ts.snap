@@ -54,6 +54,11 @@ exports[`categories > 11-ternary-breaks-before-and-before 1`] = `const label = i
   : disabledDisplayLabel;
 `;
 
+exports[`categories > 12-a-lone-jsx-attribute-stays-on-the-tag-line 1`] = `const el = <section className="wrapper-with-a-long-name">
+  {body}
+</section>;
+`;
+
 exports[`categories > 12-jsx-attributes-break-like-object-properties 1`] = `const el = <section
   className={styles.wrapper}
   onClick={handleClick}

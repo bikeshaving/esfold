@@ -787,7 +787,10 @@ function jsxGroup(
   node: TSESTree.JSXOpeningElement,
 ): Group | null {
   const attrs = node.attributes;
-  if (!attrs || attrs.length === 0) return null;
+  // A lone attribute stays on the tag line however long it is: breaking it
+  // spends three lines to move one item, and the tag is no shorter for it.
+  // Two or more break normally. Prettier draws the line in the same place.
+  if (!attrs || attrs.length < 2) return null;
   const last = sourceCode.getLastToken(node)!;
   const beforeLast = sourceCode.getTokenBefore(last!);
   const closeToken =
