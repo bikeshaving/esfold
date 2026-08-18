@@ -20,7 +20,7 @@ name: Release
 # One-time registry setup, run once by a package owner after that first publish:
 #
 #     npm trust github eslint-plugin-fold \
-#       --repo bikeshaving/fold \
+#       --repo bikeshaving/esfold \
 #       --file release.yml \
 #       --allow-stage-publish
 #

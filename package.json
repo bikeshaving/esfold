@@ -4,11 +4,11 @@
   "description": "A single ESLint rule, fold/breaks, that decides where the newlines go.",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bikeshaving/fold.git"
+    "url": "git+https://github.com/bikeshaving/esfold.git"
   },
-  "homepage": "https://github.com/bikeshaving/fold#readme",
+  "homepage": "https://github.com/bikeshaving/esfold#readme",
   "bugs": {
-    "url": "https://github.com/bikeshaving/fold/issues"
+    "url": "https://github.com/bikeshaving/esfold/issues"
   },
   "author": "Brian Kim",
   "type": "module",
@@ -40,6 +40,8 @@
   },
   "keywords": [
     "eslint",
+    "eslintplugin",
+    "eslint-plugin",
     "formatter",
     "line-breaks"
   ],
