@@ -1,6 +1,5 @@
 node_modules/
 .corpus/
 dist/
-.libuild-test/
 *.log
 .DS_Store
