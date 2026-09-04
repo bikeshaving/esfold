@@ -555,6 +555,132 @@ exports[`hugging > two-huggable-arguments-disables-hugging-the-call-breaks-norm 
 );
 `;
 
+exports[`join > a-broken-call-with-a-broken-trailing-arrow-is-joined 1`] = `foo(a, (x) => bar(x));
+`;
+
+exports[`join > a-chain-with-block-bodies-keeps-its-layout 1`] = `promise
+  .then(() => {
+    return x;
+  })
+  .catch(() => {
+    return y;
+  });
+`;
+
+exports[`join > a-destructuring-pattern-that-fits-is-joined 1`] = `const { a, b } = obj;
+`;
+
+exports[`join > a-fully-broken-array-joins-without-spaces-inside-the-brackets 1`] = `const a = [1, 2, 3];
+`;
+
+exports[`join > a-fully-broken-call-that-fits-is-joined-without-its-dangling-comma 1`] = `foo(alpha, beta);
+`;
+
+exports[`join > a-fully-broken-chain-that-fits-is-joined 1`] = `promise.then(handleValue).catch(handleError);
+`;
+
+exports[`join > a-fully-broken-group-too-long-to-join-is-kept 1`] = `foo(
+  alphaArgumentNumberOne,
+  betaArgumentNumberTwo,
+  gammaArgumentNumber
+);
+`;
+
+exports[`join > a-fully-broken-import-list-is-joined 1`] = `import { alpha, beta } from "./module.js";
+`;
+
+exports[`join > a-fully-broken-object-joins-with-spaces-inside-the-braces 1`] = `const o = { alpha: 1, beta: 2 };
+`;
+
+exports[`join > a-fully-broken-operator-chain-that-fits-is-joined 1`] = `const ok = alpha && beta;
+`;
+
+exports[`join > a-fully-broken-parameter-list-is-joined 1`] = `function f(a, b) {
+  return a;
+}
+`;
+
+exports[`join > a-fully-broken-ternary-that-fits-is-joined 1`] = `const x = cond ? yes : no;
+`;
+
+exports[`join > a-group-with-a-blank-line-inside-is-kept 1`] = `foo(
+  alpha,
+
+  beta
+);
+`;
+
+exports[`join > a-group-with-a-comment-inside-is-kept 1`] = `foo(
+  alpha, // one
+  beta
+);
+`;
+
+exports[`join > a-hugged-arrow-joins-with-the-call-close-paren 1`] = `items.map((item) => compute(item));
+`;
+
+exports[`join > a-lone-assignment-inside-a-broken-chain-does-not-join 1`] = `describe('redirect', function () {
+  before(function () {
+    this.app.use(function (req, res, next) {
+      req.originalUrl =
+        req.url =
+        req.originalUrl.replace(/\\/snow(\\/|$)/, '/snow \\u2603$1')
+      next()
+    })
+  })
+})
+`;
+
+exports[`join > a-type-literal-that-fits-is-joined 1`] = `type X = { a: string; b: number };
+`;
+
+exports[`join > a-union-too-long-to-join-keeps-its-leading-pipe 1`] = `type U =
+  | AlphaLongTypeName
+  | BetaLongTypeName
+  | GammaLongTypeName;
+`;
+
+exports[`join > a-union-with-a-leading-pipe-joins-without-it 1`] = `type U = Alpha | Beta;
+`;
+
+exports[`join > an-array-of-arrays-keeps-one-row-per-line 1`] = `const shapes = {
+  I: [
+    [0, 0, 0, 0],
+    [1, 1, 1, 1],
+  ],
+  O: [
+    [1, 1],
+    [1, 1],
+  ],
+};
+`;
+
+exports[`join > an-array-of-objects-keeps-one-row-per-line 1`] = `const rows = [
+  { id: 1, name: "a" },
+  { id: 2, name: "b" },
+];
+`;
+
+exports[`join > an-array-of-single-element-arrays-is-joined 1`] = `const flat = [[1], [2]];
+`;
+
+exports[`join > an-interface-body-is-not-joined 1`] = `interface X {
+  a: string;
+  b: number;
+}
+`;
+
+exports[`join > jsx-attributes-that-fit-are-joined 1`] = `const el = (
+  <div a="1" b="2" />
+);
+`;
+
+exports[`join > nested-groups-join-inside-out 1`] = `foo(bar(a, b), c);
+`;
+
+exports[`join > type-members-split-only-by-newlines-get-a-separator-when-joined 1`] = `type StorageValue<S> = { state: S; version?: number }
+`;
+
 exports[`operators > a-comma-first-group-with-a-dangling-comma-is-already-consist 1`] = `const o = {
   a: 1
   ,b: 2

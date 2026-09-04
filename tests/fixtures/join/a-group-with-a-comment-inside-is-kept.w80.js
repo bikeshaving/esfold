@@ -1,0 +1,4 @@
+foo(
+  alpha, // one
+  beta
+);

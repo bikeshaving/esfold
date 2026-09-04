@@ -8,6 +8,7 @@ const linter = new Linter();
 export interface FoldOptions {
   maxWidth?: number;
   tabWidth?: number;
+  join?: boolean;
   ts?: boolean;
   sourceType?: 'module' | 'commonjs';
 }
@@ -15,6 +16,7 @@ export interface FoldOptions {
 function configFor({
   maxWidth = 80,
   tabWidth = 2,
+  join = false,
   ts = false,
   sourceType = 'module',
 }: FoldOptions): LinterTypes.Config {
@@ -27,7 +29,7 @@ function configFor({
     // gets attributed here.
     linterOptions: { reportUnusedDisableDirectives: 'off' as const },
     rules: {
-      'esfold/breaks': ['error', { maxWidth, tabWidth }] as LinterTypes.RuleEntry,
+      'esfold/breaks': ['error', { maxWidth, tabWidth, join }] as LinterTypes.RuleEntry,
     },
     languageOptions: {
       ...(ts ? { parser: tseslint.parser } : {}),

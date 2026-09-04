@@ -23,8 +23,15 @@ const all = collectFiles(CORPUS_ROOT);
 const step = Math.max(1, Math.floor(all.length / MAX_FILES));
 const files = all.filter((_, i) => i % step === 0).slice(0, MAX_FILES);
 
-for (const maxWidth of [80, 60]) {
-  test(`${files.length} files from eslint/lib at maxWidth ${maxWidth}`, () => {
+const RUNS: { maxWidth: number; join?: boolean }[] = [
+  { maxWidth: 80 },
+  { maxWidth: 60 },
+  { maxWidth: 80, join: true },
+];
+
+for (const { maxWidth, join } of RUNS) {
+  const label = `${files.length} files from eslint/lib at maxWidth ${maxWidth}${join ? ', join' : ''}`;
+  test(label, () => {
     let formatted = 0;
     let changed = 0;
 
@@ -34,17 +41,17 @@ for (const maxWidth of [80, 60]) {
       if (!sourceType) continue;
 
       const before = parse(code, { sourceType });
-      const once = fold(code, { maxWidth, sourceType });
+      const once = fold(code, { maxWidth, join, sourceType });
       formatted++;
       if (once !== code) changed++;
 
       expect(stripLocations(parse(once, { sourceType }))).toEqual(
         stripLocations(before),
       );
-      expect(fold(once, { maxWidth, sourceType })).toBe(once);
+      expect(fold(once, { maxWidth, join, sourceType })).toBe(once);
     }
 
     expect(formatted).toBeGreaterThan(50);
-    if (maxWidth === 60) expect(changed).toBeGreaterThan(10);
+    if (maxWidth === 60 || join) expect(changed).toBeGreaterThan(10);
   });
 }

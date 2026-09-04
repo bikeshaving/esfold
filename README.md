@@ -50,6 +50,7 @@ Pair it with `@stylistic/comma-dangle` if you want a trailing comma.
   nested JSX elements.
 - **`inconsistentGroup`** — a group has line breaks applied inconsistently,
   e.g. an array which does not have breaks for each elements.
+- **`joinable`** — with `join: true`, a fully broken group fits on one line.
 
 ## Options
 
@@ -57,6 +58,7 @@ Pair it with `@stylistic/comma-dangle` if you want a trailing comma.
 |---|---|---|
 | `maxWidth` | `80` | Columns a line may occupy. |
 | `tabWidth` | `2` | Columns a tab advances to. Matters only for tab-indented files. |
+| `join` | `false` | Also join a fully broken group back onto one line when it fits. |
 
 ```js
 import esfold from 'eslint-plugin-esfold';
@@ -78,7 +80,32 @@ preferences encoded in other rules like `@stylistic/operator-linebreak`,
 single `--fix` run.
 
 Fold does not attempt to provide a 1-to-1 canonical representation of the
-program, and will always preserve line breaks which are consistently applied.
+program, and by default preserves line breaks which are consistently applied.
+
+## Joining lines
+
+With `join: true`, width alone decides the layout: a group broken one element
+per line is joined back onto one line when it fits.
+
+```js
+const point = {
+  x: 1,
+  y: 2,
+};
+```
+
+becomes
+
+```js
+const point = { x: 1, y: 2 };
+```
+
+A dangling comma goes with the breaks, and a leading `|` or `&` in a broken
+union or intersection type goes too. A group containing a blank line or a
+comment keeps its layout, as do interface bodies and anything that must break,
+like a block. Rules that force breaks, such as
+`@stylistic/array-element-newline: always`, fight with `join` and should not
+be combined with it.
 
 ## Requirements
 

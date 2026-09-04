@@ -166,6 +166,17 @@ const isDroppedByJsx = (node) =>
   /[\r\n]/.test(node.value);
 
 /** AST comparison that ignores position and survives BigInt literals. */
+// A join drops a dangling comma or semicolon and a leading `|` or `&`, and
+// puts a separator between type members that had only a newline. Separators
+// are structural, so the AST already checks them; the token list is compared
+// without them.
+const CLOSERS = new Set([')', ']', '}', '>']);
+const isDroppedByJoin = (token, prev) =>
+  token?.type === 'Punctuator' &&
+  (token.value === ',' || token.value === ';' ||
+    ((token.value === '|' || token.value === '&') &&
+      prev?.type === 'Punctuator' && !CLOSERS.has(prev.value)));
+
 export const stripLocations = (node) =>
   JSON.stringify(node, (key, value) => {
     // Positions first: `range` is itself an array, so filtering arrays
@@ -176,6 +187,8 @@ export const stripLocations = (node) =>
       key === 'end' || key === 'parent'
     )
       return undefined;
-    if (Array.isArray(value)) return value.filter((v) => !isDroppedByJsx(v));
-    return typeof value === 'bigint' ? `${value}n` : value;
+    if (!Array.isArray(value)) return typeof value === 'bigint' ? `${value}n` : value;
+    const kept = value.filter((v) => !isDroppedByJsx(v));
+    if (key !== 'tokens') return kept;
+    return kept.filter((v, i) => !isDroppedByJoin(v, kept[i - 1]));
   });

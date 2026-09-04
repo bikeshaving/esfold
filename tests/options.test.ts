@@ -25,6 +25,29 @@ test('tabWidth defaults to 2', () => {
   expect(fold(TABBED, { maxWidth: 46 })).toBe(fold(TABBED, { maxWidth: 46, tabWidth: 2 }));
 });
 
+// `join` decides whether a consistently broken group that would fit is
+// pulled back onto one line. A partially broken group is joined either way.
+const BROKEN = 'foo(\n  alpha,\n  beta,\n);\n';
+const PARTIAL = 'foo(alpha,\n  beta);\n';
+
+test('join defaults to off: a fully broken group that fits is kept', () => {
+  expect(fold(BROKEN)).toBe(BROKEN);
+  expect(fold(BROKEN)).toBe(fold(BROKEN, { join: false }));
+});
+
+test('join pulls a fully broken group that fits onto one line', () => {
+  expect(fold(BROKEN, { join: true })).toBe('foo(alpha, beta);\n');
+});
+
+test('join leaves a fully broken group that does not fit', () => {
+  expect(fold(BROKEN, { join: true, maxWidth: 12 })).toBe(BROKEN);
+});
+
+test('a partially broken group is joined with or without join', () => {
+  expect(fold(PARTIAL)).toBe('foo(alpha, beta);\n');
+  expect(fold(PARTIAL, { join: true })).toBe('foo(alpha, beta);\n');
+});
+
 test('tabWidth does not affect space-indented files', () => {
   const spaced = '      const value = compute(alphaArgument, betaArgument);\n';
   expect(fold(spaced, { maxWidth: 46, tabWidth: 8 })).toBe(

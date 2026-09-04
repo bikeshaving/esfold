@@ -11,6 +11,19 @@ const isDroppedByJsx = (node: any) =>
 
 const IGNORED = new Set(['range', 'loc', 'start', 'end', 'parent']);
 
+// A join drops a dangling comma or semicolon and a leading `|` or `&`, and
+// puts a separator between type members that had only a newline. Separators
+// are structural, so the AST already checks them; the token list is compared
+// without them.
+const CLOSERS = new Set([')', ']', '}', '>']);
+const isDroppedByJoin = (token: any, prev: any) =>
+  token?.type === 'Punctuator' &&
+  (token.value === ',' ||
+    token.value === ';' ||
+    ((token.value === '|' || token.value === '&') &&
+      prev?.type === 'Punctuator' &&
+      !CLOSERS.has(prev.value)));
+
 /** Deep AST comparison value, ignoring position data. */
 export function stripLocations(node: any): any {
   if (Array.isArray(node)) {
@@ -20,7 +33,11 @@ export function stripLocations(node: any): any {
     const out: Record<string, unknown> = {};
     for (const key of Object.keys(node)) {
       if (IGNORED.has(key)) continue;
-      out[key] = stripLocations(node[key]);
+      const value = node[key];
+      out[key] =
+        key === 'tokens' && Array.isArray(value)
+          ? stripLocations(value.filter((t, i) => !isDroppedByJoin(t, value[i - 1])))
+          : stripLocations(value);
     }
     return out;
   }

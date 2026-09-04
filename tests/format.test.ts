@@ -7,6 +7,7 @@ import { fold } from './fold.js';
 const FIXTURES = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 
 // `<name>.w40.ts` formats at width 40; a missing `.wN` means the default 80.
+// Fixtures under `join/` run with the `join` option on.
 // The width belongs in the filename rather than in the file so that fixtures
 // stay parseable source — a pragma comment would itself be input to the
 // formatter and could change the result it is meant to pin down.
@@ -25,7 +26,8 @@ for (const category of readdirSync(FIXTURES).sort()) {
       const { name, maxWidth, ts } = parseName(file);
       test(name, () => {
         const source = readFileSync(join(FIXTURES, category, file), 'utf8');
-        expect(fold(source, { maxWidth, ts })).toMatchSnapshot();
+        const joinLines = category === 'join';
+        expect(fold(source, { maxWidth, ts, join: joinLines })).toMatchSnapshot();
       });
     }
   });

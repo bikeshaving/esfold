@@ -83,8 +83,15 @@ const CONFIGS = {
     // test against it.
     '@stylistic/comma-dangle': 'off',
   }),
+  // With `join`, Fold pulls fitting groups back onto one line, and
+  // comma-dangle then has to agree that the trailing comma is gone.
+  join: withRules(configFor([2]), {
+    'esfold/breaks': ['error', { maxWidth: 60, join: true }],
+    '@stylistic/object-curly-spacing': ['error', 'always'],
+    '@stylistic/array-bracket-spacing': ['error', 'never'],
+  }),
   // Force-break rules: they add breaks, Fold respects them and completes the
-  // group. This is the payoff for never joining lines — it should
+  // group. This is the payoff for never joining lines by default — it should
   // converge with no coordination code at all.
   'force-breaks': withRules(configFor([2]), {
     '@stylistic/array-element-newline': ['error', 'always'],

@@ -26,6 +26,8 @@ import {
 } from './corpus.js';
 
 const MAX_PER_REPO = Number(process.env.MAX_FILES ?? 120);
+// JOIN=1 audits with the `join` option on.
+const JOIN = process.env.JOIN === '1';
 
 const parse = (code) => {
   try {
@@ -40,7 +42,7 @@ const linter = new Linter();
 const configFor = (maxWidth, tab) => ({
   plugins: { esfold: fold },
   linterOptions: { reportUnusedDisableDirectives: 'off' },
-  rules: { 'esfold/breaks': ['error', { maxWidth, tabWidth: tab }] },
+  rules: { 'esfold/breaks': ['error', { maxWidth, tabWidth: tab, join: JOIN }] },
   languageOptions: {
     parser: tseslint.parser,
     ecmaVersion: 'latest',
@@ -136,7 +138,7 @@ for (const repo of requireCorpus()) {
     `${repo.padEnd(10)} w${String(width).padEnd(3)}t${String(tab).padEnd(2)} ${String(n).padStart(4)} files ` +
       `${String(lines).padStart(6)} lines | touched ${String(Math.round((changed / (n || 1)) * 100)).padStart(3)}% ` +
       `${String(edits).padStart(5)} edits ` +
-      `(width ${kinds.overWidth ?? 0}, consistency ${kinds.inconsistentGroup ?? 0}, necessary ${kinds.necessaryBreak ?? 0})` +
+      `(width ${kinds.overWidth ?? 0}, consistency ${kinds.inconsistentGroup ?? 0}, necessary ${kinds.necessaryBreak ?? 0}, join ${kinds.joinable ?? 0})` +
       ` | crash ${crash} ast ${astBad} idem ${idem} stuck ${stuck}${flag}`,
   );
   for (const note of notes) console.log('    ' + note);

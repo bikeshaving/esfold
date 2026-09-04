@@ -1,0 +1,3 @@
+const ok =
+  alpha &&
+  beta;
