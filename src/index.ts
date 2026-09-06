@@ -2007,7 +2007,7 @@ const breaks: TSESLint.RuleModule<MessageId, Options> = {
 const plugin: ESLint.Plugin = {
   meta: {
     name: 'eslint-plugin-esfold',
-    version: '0.1.1',
+    version: '0.1.2',
   },
   // ESLint types rules against ESTree; this one is typed against TSESTree so
   // it can walk TypeScript nodes. The shapes are identical at runtime.

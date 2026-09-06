@@ -1,6 +1,6 @@
 {
   "name": "eslint-plugin-esfold",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "A single ESLint rule, esfold/breaks, that decides where the newlines go.",
   "repository": {
     "type": "git",
@@ -36,7 +36,7 @@
     "build": "libuild build",
     "typecheck": "tsc --noEmit",
     "stage": "libuild stage --provenance",
-    "prepublishOnly": "echo 'ERROR: Cannot publish from root directory. Use libuild publish instead.' && exit 1"
+    "prepublishOnly": "echo 'ERROR: Cannot publish from root directory. Use libuild to publish or stage the package.' && exit 1"
   },
   "keywords": [
     "eslint",
