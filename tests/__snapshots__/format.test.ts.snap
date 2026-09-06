@@ -453,6 +453,21 @@ exports[`groups > over-width-call-breaks-one-argument-per-line 1`] = `const resu
 );
 `;
 
+exports[`groups > parens-around-a-return-value-break-at-the-parens-first 1`] = `function f() {
+  return (
+    aaaaaaaaaaaaaaa +
+    bbbbbbbbbbbbbbb +
+    cccccccccccccccc +
+    ddddddddddddd
+  );
+}
+`;
+
+exports[`groups > parens-around-part-of-a-return-value-are-left-alone 1`] = `function f() {
+  return (a + b) * c;
+}
+`;
+
 exports[`groups > parenthesized-first-argument-does-not-confuse-the-open-paren 1`] = `foo(
   (alpha + beta),
   gammaValueLong,
@@ -484,6 +499,11 @@ exports[`groups > respects-existing-indentation-as-the-base 1`] = `function wrap
 `;
 
 exports[`groups > short-lines-are-untouched 1`] = `const x = foo(a, b);
+`;
+
+exports[`groups > short-parens-around-a-return-value-are-left-alone 1`] = `function f() {
+  return (x);
+}
 `;
 
 exports[`groups > trailing-comma-group-breaks-after-the-trailing-comma 1`] = `const xs = [
@@ -558,6 +578,10 @@ exports[`hugging > two-huggable-arguments-disables-hugging-the-call-breaks-norm 
 exports[`join > a-broken-call-with-a-broken-trailing-arrow-is-joined 1`] = `foo(a, (x) => bar(x));
 `;
 
+exports[`join > a-broken-heritage-clause-joins-down-to-the-extends-break 1`] = `interface HTMLFontElement
+	extends Pick<globalThis.HTMLFontElement, "color" | "face" | "size"> {}
+`;
+
 exports[`join > a-chain-with-block-bodies-keeps-its-layout 1`] = `promise
   .then(() => {
     return x;
@@ -616,6 +640,9 @@ exports[`join > a-group-with-a-comment-inside-is-kept 1`] = `foo(
 );
 `;
 
+exports[`join > a-heritage-clause-that-fits-is-joined 1`] = `interface A extends B {}
+`;
+
 exports[`join > a-hugged-arrow-joins-with-the-call-close-paren 1`] = `items.map((item) => compute(item));
 `;
 
@@ -643,28 +670,16 @@ exports[`join > a-union-too-long-to-join-keeps-its-leading-pipe 1`] = `type U =
 exports[`join > a-union-with-a-leading-pipe-joins-without-it 1`] = `type U = Alpha | Beta;
 `;
 
-exports[`join > an-array-of-arrays-keeps-one-row-per-line 1`] = `const shapes = {
-  I: [
-    [0, 0, 0, 0],
-    [1, 1, 1, 1],
-  ],
-  O: [
-    [1, 1],
-    [1, 1],
-  ],
-};
+exports[`join > an-array-of-arrays-that-fits-is-joined 1`] = `const shapes = { I: [[0, 0, 0, 0], [1, 1, 1, 1]], O: [[1, 1], [1, 1]] };
 `;
 
-exports[`join > an-array-of-objects-keeps-one-row-per-line 1`] = `const rows = [
-  { id: 1, name: "a" },
-  { id: 2, name: "b" },
-];
+exports[`join > an-array-of-objects-that-fits-is-joined 1`] = `const rows = [{ id: 1, name: "a" }, { id: 2, name: "b" }];
 `;
 
 exports[`join > an-array-of-single-element-arrays-is-joined 1`] = `const flat = [[1], [2]];
 `;
 
-exports[`join > an-interface-body-is-not-joined 1`] = `interface X {
+exports[`join > an-interface-body-stays-one-member-per-line 1`] = `interface X {
   a: string;
   b: number;
 }
@@ -676,6 +691,11 @@ exports[`join > jsx-attributes-that-fit-are-joined 1`] = `const el = (
 `;
 
 exports[`join > nested-groups-join-inside-out 1`] = `foo(bar(a, b), c);
+`;
+
+exports[`join > parens-around-a-return-value-are-joined 1`] = `function f() {
+  return (foooooo(aaaaaaa, bbbbbbb));
+}
 `;
 
 exports[`join > type-members-split-only-by-newlines-get-a-separator-when-joined 1`] = `type StorageValue<S> = { state: S; version?: number }
@@ -912,9 +932,24 @@ exports[`staircase > ternaries-chained-through-the-alternate-share-one-level 1`]
   : String(tag);
 `;
 
+exports[`types > a-class-breaks-before-extends-and-implements 1`] = `class HTMLFontElement
+  extends Base
+  implements Something<globalThis.HTMLFontElement>, Other<"color"> {}
+`;
+
 exports[`types > a-conditional-type-breaks-like-a-ternary 1`] = `type Cond<T> = T extends StringLikeThing
   ? TrueBranchType
   : FalseBranch;
+`;
+
+exports[`types > a-long-interface-heritage-breaks-before-extends 1`] = `interface HTMLFontElement
+  extends Pick<globalThis.HTMLFontElement, "color" | "face" | "size"> {}
+`;
+
+exports[`types > a-one-line-interface-body-breaks-one-member-per-line 1`] = `interface A {
+  x: number;
+  y: string
+}
 `;
 
 exports[`types > a-tuple-type-breaks-like-an-array 1`] = `type Tup = [
@@ -948,10 +983,22 @@ exports[`types > function-type-parameters-break-like-a-parameter-list 1`] = `typ
 ) => ReturnHere;
 `;
 
+exports[`types > several-heritage-clauses-nest-under-the-keyword 1`] = `interface HTMLFontElement
+  extends Pick<globalThis.HTMLFontElement, "color" | "face">,
+    Other<"size" | "x"> {}
+`;
+
 exports[`types > type-arguments-break-like-an-argument-list 1`] = `util.assertEqual<
   UnionedType,
   { a: string; b?: string | undefined }
 >(value);
+`;
+
+exports[`types > type-arguments-break-only-after-the-extends-break 1`] = `interface HTMLFontElement
+  extends Pick<
+    globalThis.HTMLFontElement,
+    "color" | "face" | "size" | "something" | "else"
+  > {}
 `;
 
 exports[`types > type-parameters-break-the-same-way 1`] = `function convert<

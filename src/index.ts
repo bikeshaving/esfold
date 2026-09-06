@@ -503,6 +503,26 @@ function statementListGaps(sourceCode: Source, statements: Node[]): Gap[] {
   return gaps;
 }
 
+// Parens wrapping a whole return value break like an `if` head: at the
+// parens first, before anything inside them.
+function returnParensGroup(
+  sourceCode: Source,
+  node: TSESTree.ReturnStatement,
+): Group | null {
+  const value = node.argument;
+  if (!value) return null;
+  const open = sourceCode.getTokenAfter(sourceCode.getFirstToken(node)!);
+  const close = sourceCode.getTokenAfter(value);
+  if (!isPunct(open, '(') || !isPunct(close, ')')) return null;
+  if (open.range[1] > value.range[0]) return null;
+  return {
+    node,
+    range: [open.range[0], close.range[1]],
+    kind: 'condition',
+    gaps: [gapAfter(sourceCode, open), gapBefore(sourceCode, close, 'close')],
+  };
+}
+
 function blockGaps(sourceCode: Source, node: Node, body: Node[]): Gap[] | null {
   const open = sourceCode.getFirstToken(node)!;
   const close = sourceCode.getLastToken(node)!;
@@ -918,16 +938,38 @@ function conditionalTypeGroup(
   };
 }
 
+// `class A extends B implements C` breaks before each keyword, one level in.
+// The clause's own list breaks after, nested under the keyword.
+function heritageGroup(
+  sourceCode: Source,
+  node: TSESTree.ClassDeclaration | TSESTree.ClassExpression | TSESTree.TSInterfaceDeclaration,
+): Group | null {
+  const heads: Node[] = [];
+  if (node.type === 'TSInterfaceDeclaration') {
+    if (node.extends.length > 0) heads.push(node.extends[0]);
+  } else {
+    if (node.superClass) heads.push(node.superClass);
+    if (node.implements && node.implements.length > 0) heads.push(node.implements[0]);
+  }
+  if (heads.length === 0) return null;
+  const gaps: Gap[] = [];
+  for (const head of heads) {
+    const keyword = sourceCode.getTokenBefore(head, {
+      filter: (t) => t.value === 'extends' || t.value === 'implements',
+    });
+    if (!keyword) return null;
+    gaps.push(gapBefore(sourceCode, keyword, 'item', ' '));
+  }
+  const brace = sourceCode.getFirstToken(node.body)!;
+  return { node, gaps, range: [node.range[0], brace.range[0]] };
+}
+
 function implementsGroup(
   sourceCode: Source,
-  node: TSESTree.ClassDeclaration | TSESTree.ClassExpression,
+  node: TSESTree.ClassDeclaration | TSESTree.ClassExpression | TSESTree.TSInterfaceDeclaration,
 ): Group | null {
-  const items = node.implements;
+  const items = node.type === 'TSInterfaceDeclaration' ? node.extends : node.implements;
   if (!items || items.length < 2) return null;
-  const keyword = sourceCode.getTokenBefore(items[0], {
-    filter: (t) => t.value === 'implements',
-  });
-  if (!keyword) return null;
   const gaps: Gap[] = [];
   for (let i = 1; i < items.length; i++) {
     const comma = sourceCode.getTokenAfter(items[i - 1], {
@@ -1126,6 +1168,11 @@ function collectGroups(sourceCode: Source, operatorSide: OperatorSide = 'after')
         if (group) candidates.push(group);
         break;
       }
+      case 'ReturnStatement': {
+        const group = returnParensGroup(sourceCode, node);
+        if (group) candidates.push(group);
+        break;
+      }
       case 'ObjectExpression': {
         const group = bracketGroup(sourceCode, node, node.properties, '{', '}');
         if (group) candidates.push(group);
@@ -1299,8 +1346,9 @@ function collectGroups(sourceCode: Source, operatorSide: OperatorSide = 'after')
         break;
       }
       case 'TSInterfaceBody': {
+        // A declaration, laid out like a class body.
         const group = typeMembersGroup(sourceCode, node, node.body);
-        if (group) candidates.push(group);
+        if (group) necessary.push(group);
         break;
       }
       case 'TSTupleType': {
@@ -1330,7 +1378,10 @@ function collectGroups(sourceCode: Source, operatorSide: OperatorSide = 'after')
         break;
       }
       case 'ClassDeclaration':
-      case 'ClassExpression': {
+      case 'ClassExpression':
+      case 'TSInterfaceDeclaration': {
+        const heritage = heritageGroup(sourceCode, node);
+        if (heritage) candidates.push(heritage);
         const group = implementsGroup(sourceCode, node);
         if (group) candidates.push(group);
         break;
@@ -1613,22 +1664,6 @@ function format(
   // is on, which is what keeps a deliberate layout safe by default. With
   // `join`, a fully broken group is also pulled back onto one line when it
   // fits, so width alone decides the layout.
-  // An array of arrays or objects, each with more than one entry, is laid out
-  // as a table: one row per line, whatever the width.
-  function isTable(group: Group): boolean {
-    const items = group.items;
-    if (group.node.type !== 'ArrayExpression' || !items || items.length < 2) {
-      return false;
-    }
-    const first = items[0];
-    return items.every((item) => {
-      if (!item || item.type !== first!.type) return false;
-      if (item.type === 'ArrayExpression') return item.elements.length > 1;
-      if (item.type === 'ObjectExpression') return item.properties.length > 1;
-      return false;
-    });
-  }
-
   function completeGroup(group: Group) {
     // A gap an enclosing group has decided is left to it.
     const gaps = ownGaps(group).filter((gap) => !isDecided(gap));
@@ -1639,9 +1674,6 @@ function format(
     if (consistent && !join) return;
     if (!consistent && (group.addable === false || group.complete === false))
       return;
-    // An interface body is a declaration, laid out like a class body.
-    if (consistent && group.node.type === 'TSInterfaceBody') return;
-    if (consistent && isTable(group)) return;
     // A chain broken at some dots is a deliberate head/tail split; completing
     // it would pull `Object.keys(value)` apart. An arrow's gaps are not peers,
     // so completing them would break the `=>` of every arrow sitting in an

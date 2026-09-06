@@ -46,8 +46,8 @@ Pair it with `@stylistic/comma-dangle` if you want a trailing comma.
 - **`overWidth`** — the line exceeds `maxWidth` and contains valid potential
   breaks.
 - **`necessaryBreak`** — a line contains syntax which must be followed by a
-  break regardless of width, e.g. blocks, classes, statement boundaries or
-  nested JSX elements.
+  break regardless of width, e.g. blocks, classes, interface bodies,
+  statement boundaries or nested JSX elements.
 - **`inconsistentGroup`** — a group has line breaks applied inconsistently,
   e.g. an array which does not have breaks for each elements.
 - **`joinable`** — with `join: true`, a fully broken group fits on one line.
