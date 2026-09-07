@@ -199,8 +199,12 @@ function isForbiddenBreak(sourceCode: Source, gap: Gap): boolean {
       return true;
   }
 
-  // Between a unary operator and its operand.
-  if (prev.type === 'Punctuator' && ALWAYS_UNARY.has(prev.value)) return true;
+  // Between a unary operator and its operand. A `!` after an operand is a
+  // non-null assertion, which ends the operand rather than starting one.
+  if (prev.type === 'Punctuator' && ALWAYS_UNARY.has(prev.value)) {
+    const before = sourceCode.getTokenBefore(prev);
+    if (prev.value !== '!' || !looksLikeOperandEnd(before)) return true;
+  }
   if (
     prev.type === 'Keyword' &&
     (prev.value === 'typeof' ||
@@ -674,7 +678,10 @@ function paramsGroup(
   if (!close) return null;
   const gaps = listGaps(sourceCode, open, close, params);
   if (!gaps) return null;
-  const range: Range = [open.range[0], close.range[1]];
+  // The return type is part of the signature: an overflow inside it is fixed
+  // by breaking the parameters, not the type.
+  const end = node.returnType ? node.returnType.range[1] : close.range[1];
+  const range: Range = [open.range[0], end];
   const huggable = params.filter(isHuggable);
   if (
     huggable.length === 1 &&
@@ -1872,9 +1879,19 @@ function format(
       return measureLine(indent + text.slice(itemStart, itemEnd), tabWidth) > maxWidth;
     };
 
+    // A hug holds only while the head fits through the hugged bracket. Past
+    // that, the call breaks like any other rather than something inside an
+    // earlier argument.
+    const hugFails = (group: Group) => {
+      const hug = group.hug;
+      if (!hug || hug[0] < vl.start || hug[0] > vl.end) return false;
+      const head = text.slice(vl.start, hug[0] + 1);
+      return measureLine(vl.indent + head, tabWidth) > maxWidth;
+    };
+
     const onLine = [...groupsOnLine(vl)].filter(
       (group) =>
-        group.addable !== false &&
+        (group.addable !== false || hugFails(group)) &&
         !cannotHelp(group) &&
         group.gaps.some(
           (gap) =>
@@ -1917,8 +1934,10 @@ function format(
 
     // Prefer a group spanning the overflow, then one that reaches it:
     // `assertEqual<A, B>(v)` overflows inside the type arguments, not at `(`.
+    // A group ending exactly at the overflow spans it too: breaking its close
+    // gap moves the overflowing tail to the next line.
     const spanning = breakable.filter(
-      (group) => groupRange(group)[1] > overflow,
+      (group) => groupRange(group)[1] >= overflow,
     );
     const reaching = spanning.filter((group) =>
       group.gaps.some(

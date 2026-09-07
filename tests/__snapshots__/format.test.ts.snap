@@ -643,6 +643,14 @@ exports[`join > a-group-with-a-comment-inside-is-kept 1`] = `foo(
 exports[`join > a-heritage-clause-that-fits-is-joined 1`] = `interface A extends B {}
 `;
 
+exports[`join > a-hug-whose-head-does-not-fit-breaks-every-argument 1`] = `function f() {
+  const close = sourceCode.getTokenBefore(
+    sourceCode.getFirstToken(node.body)!,
+    { filter: (t) => isPunct(t, ")") }
+  );
+}
+`;
+
 exports[`join > a-hugged-arrow-joins-with-the-call-close-paren 1`] = `items.map((item) => compute(item));
 `;
 
@@ -932,6 +940,15 @@ exports[`staircase > ternaries-chained-through-the-alternate-share-one-level 1`]
   : String(tag);
 `;
 
+exports[`types > a-break-after-a-non-null-assertion-is-allowed 1`] = `function f() {
+  for (let i = findLine(start); i <= findLine(end); i++) visited.add(
+    vlines[i]!
+  );
+  const y = !aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ||
+    !bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb;
+}
+`;
+
 exports[`types > a-class-breaks-before-extends-and-implements 1`] = `class HTMLFontElement
   extends Base
   implements Something<globalThis.HTMLFontElement>, Other<"color"> {}
@@ -974,6 +991,14 @@ exports[`types > an-interface-body-breaks-the-same-way 1`] = `interface Iface {
   alphaValue: string;
   betaValue: number;
   gamma: boolean
+}
+`;
+
+exports[`types > an-overflow-in-the-return-type-breaks-the-parameters 1`] = `function arrowBodyGroup(
+  sourceCode: Source,
+  node: TSESTree.FunctionLike
+): Group | null {
+  return null;
 }
 `;
 
