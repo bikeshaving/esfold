@@ -51,6 +51,9 @@ interface Group {
   hug?: Range;
   // Broken unconditionally rather than only when the line is too long.
   necessary?: boolean;
+  // Where the group's influence ends, when past its range: an overflow up to
+  // here is this group's to fix.
+  reach?: number;
   // A leading operator (`=\n  | A`) that goes with the breaks when joined.
   lead?: { start: number; end: number };
   // The call whose close gap a trailing arrow's group borrowed.
@@ -454,6 +457,9 @@ function callGroup(
   if (!open || open.range[0] >= args[0].range[0]) return null;
   const gaps = listGaps(sourceCode, open, close, args);
   if (!gaps) return null;
+  // From the paren, not the callee: a call on a chain continuation line
+  // indents its arguments from that line, not from the statement's first.
+  const range: Range = [open.range[0], close.range[1]];
   // A trailing function argument keeps the author's layout: the hugged form
   // reads as partially broken though it is deliberate.
   const last = args[args.length - 1];
@@ -468,9 +474,16 @@ function callGroup(
     huggable.length === 1 &&
     (huggable[0] === args[0] || huggable[0] === args[args.length - 1])
   ) {
-    return { node, gaps, items: args, addable: false, hug: huggable[0].range };
+    return {
+      node,
+      gaps,
+      range,
+      items: args,
+      addable: false,
+      hug: huggable[0].range
+    };
   }
-  return { node, gaps, items: args, complete: !trailingFunction };
+  return { node, gaps, range, items: args, complete: !trailingFunction };
 }
 
 function bracketGroup(
@@ -688,10 +701,10 @@ function paramsGroup(
   if (!close) return null;
   const gaps = listGaps(sourceCode, open, close, params);
   if (!gaps) return null;
+  const range: Range = [open.range[0], close.range[1]];
   // The return type is part of the signature: an overflow inside it is fixed
   // by breaking the parameters, not the type.
-  const end = node.returnType ? node.returnType.range[1] : close.range[1];
-  const range: Range = [open.range[0], end];
+  const reach = node.returnType?.range[1];
   const huggable = params.filter(isHuggable);
   if (
     huggable.length === 1 &&
@@ -701,12 +714,13 @@ function paramsGroup(
       node,
       gaps,
       range,
+      reach,
       kind: 'params',
       addable: false,
       hug: huggable[0].range
     };
   }
-  return { node, gaps, range, kind: 'params', items: params };
+  return { node, gaps, range, reach, kind: 'params', items: params };
 }
 
 function conditionGroup(
@@ -1755,6 +1769,12 @@ function format(
     const gaps = ownGaps(group).filter((gap) => !isDecided(gap));
     const broken = gaps.filter(hasBreak);
     if (broken.length === 0) return;
+    // A line another group joined this pass still reads as unjoined here, so
+    // any measurement would be stale. The next pass sees the real text.
+    const [spanStart, spanEnd] = joinSpan(group);
+    for (let i = findLine(spanStart); i <= findLine(spanEnd); i++) {
+      if (joined.has(vlines[i]!)) return;
+    }
     const breakable = gaps.filter((gap) => !isForbiddenBreak(sourceCode, gap));
     const consistent = broken.length >= breakable.length;
     if (consistent && !join) return;
@@ -2021,7 +2041,7 @@ function format(
     // A group ending exactly at the overflow spans it too: breaking its close
     // gap moves the overflowing tail to the next line.
     const spanning = breakable.filter(
-      (group) => groupRange(group)[1] >= overflow,
+      (group) => (group.reach ?? groupRange(group)[1]) >= overflow,
     );
     const reaching = spanning.filter((group) =>
       group.gaps.some(

@@ -152,6 +152,16 @@ exports[`chains > a-braced-case-keeps-its-brace-on-the-case-line-2 1`] = `switch
 }
 `;
 
+exports[`chains > a-call-on-a-continuation-line-indents-from-that-line 1`] = `it("responds", function (done) {
+  request(app)
+    .get("/users")
+    .expect(
+      /^\\[{"name":"tj"},{"name":"ciaran"},{"name":"aaron"},{"name":"guillermo"}\\]/,
+      done
+    );
+});
+`;
+
 exports[`chains > a-parenthesized-chain-head-is-one-unit-never-broken-inside 1`] = `const result =
   (alphaValue.betaProperty.gammaThing)
   .deltaMethod()
@@ -699,6 +709,14 @@ exports[`join > jsx-attributes-that-fit-are-joined 1`] = `const el = (
 `;
 
 exports[`join > nested-groups-join-inside-out 1`] = `foo(bar(a, b), c);
+`;
+
+exports[`join > parameters-join-while-a-broken-return-type-stays 1`] = `export function parseBunOutput(output: string): {
+  passed: number;
+  failed: number;
+} {
+  return null!;
+}
 `;
 
 exports[`join > parens-around-a-return-value-are-joined 1`] = `function f() {
