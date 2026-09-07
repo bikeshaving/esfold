@@ -36,7 +36,9 @@ export function stripLocations(node: any): any {
       const value = node[key];
       out[key] =
         key === 'tokens' && Array.isArray(value)
-          ? stripLocations(value.filter((t, i) => !isDroppedByJoin(t, value[i - 1])))
+          ? stripLocations(
+            value.filter((t, i) => !isDroppedByJoin(t, value[i - 1]))
+          )
           : stripLocations(value);
     }
     return out;

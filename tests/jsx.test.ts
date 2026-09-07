@@ -14,7 +14,10 @@ import { fold } from './fold.js';
 const emit = (code: string) =>
   ts
     .transpileModule(code, {
-      compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ESNext },
+      compilerOptions: {
+        jsx: ts.JsxEmit.React,
+        target: ts.ScriptTarget.ESNext
+      },
     })
     .outputText.replace(/\s+/g, ' ')
     .trim();
@@ -43,7 +46,10 @@ test('a space between children is content, so the element is declined', () => {
   // JSX deletes a whitespace run containing a newline, so breaking here would
   // drop the space. Prettier emits `{" "}` to keep it; Fold only ever inserts
   // newlines, so it declines rather than guessing.
-  const out = foldJSX('const el = <p><span>alpha</span> <span>beta</span></p>;\n', 30);
+  const out = foldJSX(
+    'const el = <p><span>alpha</span> <span>beta</span></p>;\n',
+    30
+  );
   expect(out).not.toMatch(/alpha<\/span>\n/);
 });
 
@@ -61,7 +67,10 @@ test('already-broken children are left exactly alone', () => {
 
 test('fragments break like elements', () => {
   expect(
-    foldJSX('const el = <><FirstComponent /><SecondComponent /><ThirdComponent /></>;\n', 40),
+    foldJSX(
+      'const el = <><FirstComponent /><SecondComponent /><ThirdComponent /></>;\n',
+      40
+    ),
   ).toBe(
     'const el = <>\n' +
       '  <FirstComponent />\n' +

@@ -28,9 +28,24 @@ export const REPOS = [
 ];
 
 const SKIP_DIRS = new Set([
-  'node_modules', '.git', 'dist', 'build', 'lib', 'es', 'umd', 'esm',
-  'coverage', 'fixtures', '__fixtures__', 'snapshots', '__snapshots__',
-  'vendor', 'flow-typed', '.next', 'out', 'types',
+  'node_modules',
+  '.git',
+  'dist',
+  'build',
+  'lib',
+  'es',
+  'umd',
+  'esm',
+  'coverage',
+  'fixtures',
+  '__fixtures__',
+  'snapshots',
+  '__snapshots__',
+  'vendor',
+  'flow-typed',
+  '.next',
+  'out',
+  'types',
 ]);
 
 export const PARSE_OPTIONS = {
@@ -105,9 +120,15 @@ export function tabWidth(dir) {
     }
   };
   for (const name of [
-    '.prettierrc', '.prettierrc.json', '.prettierrc.json5', '.prettierrc.yaml',
-    '.prettierrc.yml', '.prettierrc.js', '.prettierrc.mjs',
-    'prettier.config.js', 'prettier.config.mjs',
+    '.prettierrc',
+    '.prettierrc.json',
+    '.prettierrc.json5',
+    '.prettierrc.yaml',
+    '.prettierrc.yml',
+    '.prettierrc.js',
+    '.prettierrc.mjs',
+    'prettier.config.js',
+    'prettier.config.mjs',
   ]) {
     const match = read(name)?.match(/"?tabWidth"?\s*:\s*(\d+)/);
     if (match) return Number(match[1]);
@@ -135,12 +156,21 @@ export function printWidth(dir) {
     }
   };
   for (const name of [
-    '.prettierrc', '.prettierrc.json', '.prettierrc.json5', '.prettierrc.yaml',
-    '.prettierrc.yml', '.prettierrc.js', '.prettierrc.mjs',
-    'prettier.config.js', 'prettier.config.mjs', '.editorconfig',
+    '.prettierrc',
+    '.prettierrc.json',
+    '.prettierrc.json5',
+    '.prettierrc.yaml',
+    '.prettierrc.yml',
+    '.prettierrc.js',
+    '.prettierrc.mjs',
+    'prettier.config.js',
+    'prettier.config.mjs',
+    '.editorconfig',
   ]) {
     const text = read(name);
-    const match = text?.match(/(?:printWidth|max_line_length)"?\s*[:=]\s*"?(\d+)/);
+    const match = text?.match(
+      /(?:printWidth|max_line_length)"?\s*[:=]\s*"?(\d+)/
+    );
     if (match) return Number(match[1]);
   }
   const pkg = read('package.json');
@@ -173,9 +203,11 @@ const isDroppedByJsx = (node) =>
 const CLOSERS = new Set([')', ']', '}', '>']);
 const isDroppedByJoin = (token, prev) =>
   token?.type === 'Punctuator' &&
-  (token.value === ',' || token.value === ';' ||
+  (token.value === ',' ||
+    token.value === ';' ||
     ((token.value === '|' || token.value === '&') &&
-      prev?.type === 'Punctuator' && !CLOSERS.has(prev.value)));
+      prev?.type === 'Punctuator' &&
+      !CLOSERS.has(prev.value)));
 
 export const stripLocations = (node) =>
   JSON.stringify(node, (key, value) => {
@@ -183,11 +215,16 @@ export const stripLocations = (node) =>
     // before this test hands back every position in the file and makes
     // every reformatted file look like a semantic change.
     if (
-      key === 'range' || key === 'loc' || key === 'start' ||
-      key === 'end' || key === 'parent'
+      key === 'range' ||
+      key === 'loc' ||
+      key === 'start' ||
+      key === 'end' ||
+      key === 'parent'
     )
       return undefined;
-    if (!Array.isArray(value)) return typeof value === 'bigint' ? `${value}n` : value;
+    if (!Array.isArray(value)) return typeof value === 'bigint'
+      ? `${value}n`
+      : value;
     const kept = value.filter((v) => !isDroppedByJsx(v));
     if (key !== 'tokens') return kept;
     return kept.filter((v, i) => !isDroppedByJoin(v, kept[i - 1]));

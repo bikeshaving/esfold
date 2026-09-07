@@ -22,7 +22,9 @@ test('the same line breaks at tabWidth 4', () => {
 });
 
 test('tabWidth defaults to 2', () => {
-  expect(fold(TABBED, { maxWidth: 46 })).toBe(fold(TABBED, { maxWidth: 46, tabWidth: 2 }));
+  expect(fold(TABBED, { maxWidth: 46 })).toBe(
+    fold(TABBED, { maxWidth: 46, tabWidth: 2 })
+  );
 });
 
 // `join` decides whether a consistently broken group that would fit is

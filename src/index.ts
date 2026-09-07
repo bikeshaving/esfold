@@ -108,7 +108,10 @@ function inferIndentUnit(lines: string[]): string {
       const delta = ws.slice(prev.length);
       // Mixed deltas like '\t ' come from continuation alignment, not a
       // nesting step; repeating one emits the tab/space mixture linters flag.
-      if (delta === '\t'.repeat(delta.length) || delta === ' '.repeat(delta.length)) {
+      if (
+        delta === '\t'.repeat(delta.length) ||
+        delta === ' '.repeat(delta.length)
+      ) {
         counts.set(delta, (counts.get(delta) ?? 0) + 1);
       }
     }
@@ -183,9 +186,7 @@ function isForbiddenBreak(sourceCode: Source, gap: Gap): boolean {
   // Token type is unreliable here: espree calls `yield` a Keyword but `await`
   // and `async` Identifiers. Match on value.
   if (
-    prev.value === 'yield' ||
-    prev.value === 'async' ||
-    prev.value === 'await'
+    prev.value === 'yield' || prev.value === 'async' || prev.value === 'await'
   )
     return true;
 
@@ -213,7 +214,9 @@ function isForbiddenBreak(sourceCode: Source, gap: Gap): boolean {
       prev.value === 'await')
   )
     return true;
-  if (prev.type === 'Punctuator' && (prev.value === '+' || prev.value === '-')) {
+  if (
+    prev.type === 'Punctuator' && (prev.value === '+' || prev.value === '-')
+  ) {
     // Unary if the thing before the operator is not an operand end.
     const beforeOp = sourceCode.getTokenBefore(prev);
     if (!looksLikeOperandEnd(beforeOp)) return true;
@@ -281,9 +284,18 @@ const BINARY_PRECEDENCE = {
 
 // `join` is what a collapsed break becomes: '' for bracket and dot gaps, ' '
 // for comma and operator gaps. Necessary gaps carry none.
-function gapAfter(sourceCode: Source, tokenOrNode: Node | Token, join = ''): Gap {
+function gapAfter(
+  sourceCode: Source,
+  tokenOrNode: Node | Token,
+  join = ''
+): Gap {
   const next = sourceCode.getTokenAfter(tokenOrNode, { includeComments: true });
-  return { start: tokenOrNode.range[1], end: next!.range[0], kind: 'item', join };
+  return {
+    start: tokenOrNode.range[1],
+    end: next!.range[0],
+    kind: 'item',
+    join
+  };
 }
 
 function gapBefore(
@@ -314,7 +326,8 @@ function listGaps(
 ): Gap[] | null {
   if (items.length === 0) return null;
   if (items.some((item) => item == null)) return null; // sparse array
-  const isSeparator = (t: Token) => separators.some((value) => isPunct(t, value));
+  const isSeparator = (t: Token) =>
+    separators.some((value) => isPunct(t, value));
   // Braces keep a space inside when joined (`{ a, b }`); brackets and parens
   // close up (`[a, b]`, `f(a, b)`).
   const bracketJoin = isPunct(open, '{') ? ' ' : '';
@@ -355,10 +368,7 @@ function listGaps(
     const beforeDangling = sourceCode.getTokenBefore(dangling, {
       includeComments: true,
     });
-    closeGap.alt = {
-      start: beforeDangling!.range[1],
-      end: dangling.range[0],
-    };
+    closeGap.alt = { start: beforeDangling!.range[1], end: dangling.range[0] };
   }
   gaps.push(closeGap);
   return gaps;
@@ -411,18 +421,17 @@ function isHuggable(node: Node): boolean {
 
 // The break after an arrow's `=>`, for bodies that can use the line it opens.
 // A member path gains nothing there, so it lets the call break instead.
-function arrowBodyGroup(sourceCode: Source, node: TSESTree.FunctionLike): Group | null {
+function arrowBodyGroup(
+  sourceCode: Source,
+  node: TSESTree.FunctionLike
+): Group | null {
   if (node.type !== 'ArrowFunctionExpression') return null;
   if (!ARROW_BREAK_BODIES.has(node.body.type)) return null;
   const arrow = sourceCode.getTokenBefore(node.body, {
     filter: (t) => isPunct(t, '=>'),
   });
   if (!arrow) return null;
-  return {
-    node,
-    kind: 'arrow',
-    gaps: [gapAfter(sourceCode, arrow, ' ')],
-  };
+  return { node, kind: 'arrow', gaps: [gapAfter(sourceCode, arrow, ' ')] };
 }
 
 function callGroup(
@@ -500,7 +509,9 @@ function statementListGaps(sourceCode: Source, statements: Node[]): Gap[] {
     // parser attaches it to the previous statement; breaking here strands it.
     if (prev && isPunct(prev, ';')) {
       const beforeSemi = sourceCode.getTokenBefore(prev);
-      if (!beforeSemi || beforeSemi.loc.end.line < prev.loc.start.line) continue;
+      if (
+        !beforeSemi || beforeSemi.loc.end.line < prev.loc.start.line
+      ) continue;
     }
     gaps.push(gapBefore(sourceCode, first!, 'same'));
   }
@@ -616,10 +627,7 @@ function methodChainGroup(
   let current = node;
   let fromCall = false;
   while (true) {
-    if (
-      current.type === 'CallExpression' ||
-      current.type === 'NewExpression'
-    ) {
+    if (current.type === 'CallExpression' || current.type === 'NewExpression') {
       if (current.arguments.some(isBlockBodyFunction)) hasBlockBody = true;
       absorbed.add(current);
       fromCall = current.type === 'CallExpression';
@@ -660,7 +668,9 @@ function methodChainGroup(
 
 function paramsGroup(
   sourceCode: Source,
-  node: TSESTree.FunctionLike | TSESTree.TSFunctionType | TSESTree.TSConstructorType,
+  node: TSESTree.FunctionLike
+    | TSESTree.TSFunctionType
+    | TSESTree.TSConstructorType,
 ): Group | null {
   const params = node.params;
   if (!params || params.length === 0) return null;
@@ -687,7 +697,14 @@ function paramsGroup(
     huggable.length === 1 &&
     (huggable[0] === params[0] || huggable[0] === params[params.length - 1])
   ) {
-    return { node, gaps, range, kind: 'params', addable: false, hug: huggable[0].range };
+    return {
+      node,
+      gaps,
+      range,
+      kind: 'params',
+      addable: false,
+      hug: huggable[0].range
+    };
   }
   return { node, gaps, range, kind: 'params', items: params };
 }
@@ -711,7 +728,10 @@ function conditionGroup(
   };
 }
 
-function forGroup(sourceCode: Source, node: TSESTree.ForStatement): Group | null {
+function forGroup(
+  sourceCode: Source,
+  node: TSESTree.ForStatement
+): Group | null {
   if (!node.init || !node.test || !node.update) return null;
   const semi1 = sourceCode.getTokenAfter(node.init, {
     filter: (t) => isPunct(t, ';'),
@@ -722,9 +742,10 @@ function forGroup(sourceCode: Source, node: TSESTree.ForStatement): Group | null
   if (!semi1 || !semi2) return null;
   // The head's own `)` — not the first `)` after the update clause, which is
   // that clause's own closing paren when it is parenthesized.
-  const close = sourceCode.getTokenBefore(sourceCode.getFirstToken(node.body)!, {
-    filter: (t) => isPunct(t, ')'),
-  });
+  const close = sourceCode.getTokenBefore(
+    sourceCode.getFirstToken(node.body)!,
+    { filter: (t) => isPunct(t, ')') }
+  );
   if (!close) return null;
   return {
     node,
@@ -750,7 +771,8 @@ function specifierGroup(
   });
   if (!open || !close) return null;
   const gaps = listGaps(sourceCode, open, close, named);
-  return gaps && { node, gaps, range: [open.range[0], close.range[1]], items: named };
+  return gaps &&
+    { node, gaps, range: [open.range[0], close.range[1]], items: named };
 }
 
 function ternaryGroup(
@@ -851,7 +873,8 @@ function jsxGroup(
 
 function typeListGroup(
   sourceCode: Source,
-  node: TSESTree.TSTypeParameterInstantiation | TSESTree.TSTypeParameterDeclaration,
+  node: TSESTree.TSTypeParameterInstantiation
+    | TSESTree.TSTypeParameterDeclaration,
 ): Group | null {
   const items = node.params;
   if (!items || items.length === 0) return null;
@@ -860,12 +883,7 @@ function typeListGroup(
   if (!isPunct(open, '<') || !isPunct(close, '>')) return null;
   const gaps = listGaps(sourceCode, open, close, items);
   return (
-    gaps && {
-      node,
-      gaps,
-      items,
-      range: [open.range[0], close.range[1]],
-    }
+    gaps && { node, gaps, items, range: [open.range[0], close.range[1]] }
   );
 }
 
@@ -882,7 +900,10 @@ function typeMembersGroup(
   return gaps && { node, gaps, items: members };
 }
 
-function tupleTypeGroup(sourceCode: Source, node: TSESTree.TSTupleType): Group | null {
+function tupleTypeGroup(
+  sourceCode: Source,
+  node: TSESTree.TSTupleType
+): Group | null {
   const items = node.elementTypes;
   if (!items || items.length === 0) return null;
   const open = sourceCode.getFirstToken(node)!;
@@ -949,14 +970,18 @@ function conditionalTypeGroup(
 // The clause's own list breaks after, nested under the keyword.
 function heritageGroup(
   sourceCode: Source,
-  node: TSESTree.ClassDeclaration | TSESTree.ClassExpression | TSESTree.TSInterfaceDeclaration,
+  node: TSESTree.ClassDeclaration
+    | TSESTree.ClassExpression
+    | TSESTree.TSInterfaceDeclaration,
 ): Group | null {
   const heads: Node[] = [];
   if (node.type === 'TSInterfaceDeclaration') {
     if (node.extends.length > 0) heads.push(node.extends[0]);
   } else {
     if (node.superClass) heads.push(node.superClass);
-    if (node.implements && node.implements.length > 0) heads.push(node.implements[0]);
+    if (node.implements && node.implements.length > 0) heads.push(
+      node.implements[0]
+    );
   }
   if (heads.length === 0) return null;
   const gaps: Gap[] = [];
@@ -973,9 +998,13 @@ function heritageGroup(
 
 function implementsGroup(
   sourceCode: Source,
-  node: TSESTree.ClassDeclaration | TSESTree.ClassExpression | TSESTree.TSInterfaceDeclaration,
+  node: TSESTree.ClassDeclaration
+    | TSESTree.ClassExpression
+    | TSESTree.TSInterfaceDeclaration,
 ): Group | null {
-  const items = node.type === 'TSInterfaceDeclaration' ? node.extends : node.implements;
+  const items = node.type === 'TSInterfaceDeclaration'
+    ? node.extends
+    : node.implements;
   if (!items || items.length < 2) return null;
   const gaps: Gap[] = [];
   for (let i = 1; i < items.length; i++) {
@@ -993,9 +1022,22 @@ function implementsGroup(
 }
 
 const ASSIGN_OPS = new Set([
-  '=', '+=', '-=', '*=', '/=', '%=', '**=',
-  '<<=', '>>=', '>>>=', '&=', '|=', '^=',
-  '&&=', '||=', '??=',
+  '=',
+  '+=',
+  '-=',
+  '*=',
+  '/=',
+  '%=',
+  '**=',
+  '<<=',
+  '>>=',
+  '>>>=',
+  '&=',
+  '|=',
+  '^=',
+  '&&=',
+  '||=',
+  '??=',
 ]);
 
 // A value with no interior structure. Moving one to its own line never pays:
@@ -1118,9 +1160,12 @@ function chainGroup(
   for (const member of members) absorbed.add(member);
   const gaps: Gap[] = members.map((member) => {
     const operator = sourceCode.getTokenAfter((member as { left: Node }).left, {
-      filter: (t: Token) => t.value === (member as { operator: string }).operator,
+      filter: (t: Token) => t.value ===
+        (member as { operator: string }).operator,
     });
-    const prev = sourceCode.getTokenBefore(operator!, { includeComments: true });
+    const prev = sourceCode.getTokenBefore(operator!, {
+      includeComments: true
+    });
     const next = sourceCode.getTokenAfter(operator!, { includeComments: true });
     const before = { start: prev!.range[1], end: operator!.range[0] };
     const after = { start: operator!.range[1], end: next!.range[0] };
@@ -1132,7 +1177,10 @@ function chainGroup(
   return { node, gaps, kind: 'operator' };
 }
 
-function collectGroups(sourceCode: Source, operatorSide: OperatorSide = 'after') {
+function collectGroups(
+  sourceCode: Source,
+  operatorSide: OperatorSide = 'after'
+) {
   const candidates: Group[] = [];
   const necessary: Group[] = [];
   const absorbed = new Set<Node>();
@@ -1259,7 +1307,12 @@ function collectGroups(sourceCode: Source, operatorSide: OperatorSide = 'after')
         const close = brace && sourceCode.getTokenBefore(brace);
         const group =
           close &&
-          conditionGroup(sourceCode, node, sourceCode.getFirstToken(node)!, close);
+          conditionGroup(
+            sourceCode,
+            node,
+            sourceCode.getFirstToken(node)!,
+            close
+          );
         if (group) candidates.push(group);
         break;
       }
@@ -1306,7 +1359,9 @@ function collectGroups(sourceCode: Source, operatorSide: OperatorSide = 'after')
         const group = jsxChildrenGroup(
           sourceCode,
           node,
-          node.type === 'JSXElement' ? node.openingElement : node.openingFragment,
+          node.type === 'JSXElement'
+          ? node.openingElement
+          : node.openingFragment,
           node.type === 'JSXElement'
             ? node.closingElement!
             : node.closingFragment,
@@ -1476,7 +1531,10 @@ function physicalLines(text: string): VLine[] {
 }
 
 function lineWidth(text: string, vline: VLine, tabWidth: number): number {
-  return measureLine(vline.indent + text.slice(vline.start, vline.end), tabWidth);
+  return measureLine(
+    vline.indent + text.slice(vline.start, vline.end),
+    tabWidth
+  );
 }
 
 function lineIndent(text: string, vline: VLine): string {
@@ -1498,9 +1556,32 @@ function inferNewline(text: string): string {
 // Only side-unambiguous operators are sampled: '+', '-' and '*' may be unary
 // or a generator star, which would pollute the count.
 const INFER_OPS = new Set([
-  '&&', '||', '??', '==', '===', '!=', '!==', '<=', '>=',
-  '<<', '>>', '>>>', '%', '**', '&', '|', '^',
-  '=', '+=', '-=', '*=', '/=', '%=', '&&=', '||=', '??=',
+  '&&',
+  '||',
+  '??',
+  '==',
+  '===',
+  '!=',
+  '!==',
+  '<=',
+  '>=',
+  '<<',
+  '>>',
+  '>>>',
+  '%',
+  '**',
+  '&',
+  '|',
+  '^',
+  '=',
+  '+=',
+  '-=',
+  '*=',
+  '/=',
+  '%=',
+  '&&=',
+  '||=',
+  '??=',
 ]);
 
 function inferOperatorSide(sourceCode: Source): OperatorSide {
@@ -1627,9 +1708,7 @@ function format(
       const newIndent =
         gap.kind === 'close'
           ? baseIndent
-          : gap.kind === 'same'
-            ? lineIndent(text, vl)
-            : itemIndent;
+          : gap.kind === 'same' ? lineIndent(text, vl) : itemIndent;
       vlines.splice(
         index,
         1,
@@ -1795,11 +1874,14 @@ function format(
     }
     // The projection still describes the unjoined text, so leave these lines
     // to the next fix pass rather than measuring them wrong now.
-    for (let i = findLine(start); i <= findLine(end); i++) joined.add(vlines[i]!);
+    for (let i = findLine(start); i <= findLine(end); i++) joined.add(
+      vlines[i]!
+    );
   }
 
   const outermostFirst = [...candidates].sort(
-    (a, b) => groupRange(a)[0] - groupRange(b)[0] || groupRange(b)[1] - groupRange(a)[1],
+    (a, b) => groupRange(a)[0] - groupRange(b)[0] ||
+      groupRange(b)[1] - groupRange(a)[1],
   );
   for (const group of outermostFirst) {
     completeGroup(group);
@@ -1876,7 +1958,8 @@ function format(
       );
       if (hasInnerCandidate) return false;
       const indent = lineIndent(text, vl) + unit;
-      return measureLine(indent + text.slice(itemStart, itemEnd), tabWidth) > maxWidth;
+      return measureLine(indent + text.slice(itemStart, itemEnd), tabWidth) >
+        maxWidth;
     };
 
     // A hug holds only while the head fits through the hugged bracket. Past
@@ -1926,7 +2009,8 @@ function format(
       }
       rescue.sort(
         (a, b) =>
-          groupRange(a)[0] - groupRange(b)[0] || groupRange(b)[1] - groupRange(a)[1],
+          groupRange(a)[0] - groupRange(b)[0] ||
+          groupRange(b)[1] - groupRange(a)[1],
       );
       breakGroup(rescue[0], 'overWidth');
       continue;
@@ -1959,7 +2043,8 @@ function format(
     }
     usable.sort(
       (a, b) =>
-        groupRange(a)[0] - groupRange(b)[0] || groupRange(b)[1] - groupRange(a)[1],
+        groupRange(a)[0] - groupRange(b)[0] ||
+        groupRange(b)[1] - groupRange(a)[1],
     );
     breakGroup(usable[0], 'overWidth');
   }
@@ -1996,7 +2081,11 @@ const breaks: TSESLint.RuleModule<MessageId, Options> = {
       joinable: 'This group fits on one line.',
     },
     defaultOptions: [
-      { maxWidth: DEFAULT_MAX_WIDTH, tabWidth: DEFAULT_TAB_WIDTH, join: DEFAULT_JOIN },
+      {
+        maxWidth: DEFAULT_MAX_WIDTH,
+        tabWidth: DEFAULT_TAB_WIDTH,
+        join: DEFAULT_JOIN
+      },
     ],
   },
 
@@ -2007,7 +2096,11 @@ const breaks: TSESLint.RuleModule<MessageId, Options> = {
 
     return {
       'Program:exit'() {
-        for (const edit of format(context.sourceCode, { maxWidth, tabWidth, join })) {
+        for (const edit of format(context.sourceCode, {
+          maxWidth,
+          tabWidth,
+          join
+        })) {
           context.report({
             loc: edit.loc,
             messageId: edit.messageId,
@@ -2024,10 +2117,7 @@ const breaks: TSESLint.RuleModule<MessageId, Options> = {
 // registering the plugin — and it could not carry `maxWidth`, which is the
 // reason to configure this at all.
 const plugin: ESLint.Plugin = {
-  meta: {
-    name: 'eslint-plugin-esfold',
-    version: '0.1.2',
-  },
+  meta: { name: 'eslint-plugin-esfold', version: '0.1.2' },
   // ESLint types rules against ESTree; this one is typed against TSESTree so
   // it can walk TypeScript nodes. The shapes are identical at runtime.
   rules: { breaks: breaks as unknown as Rule.RuleModule },

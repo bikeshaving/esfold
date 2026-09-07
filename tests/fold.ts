@@ -29,7 +29,10 @@ function configFor({
     // gets attributed here.
     linterOptions: { reportUnusedDisableDirectives: 'off' as const },
     rules: {
-      'esfold/breaks': ['error', { maxWidth, tabWidth, join }] as LinterTypes.RuleEntry,
+      'esfold/breaks': [
+        'error',
+        { maxWidth, tabWidth, join }
+      ] as LinterTypes.RuleEntry,
     },
     languageOptions: {
       ...(ts ? { parser: tseslint.parser } : {}),
@@ -73,7 +76,10 @@ export function report(source: string, options: FoldOptions = {}) {
 export function parse(source: string, options: FoldOptions = {}) {
   const sourceType = options.sourceType ?? detectSourceType(source, options);
   if (!sourceType) return null;
-  linter.verify(source, { ...configFor({ ...options, sourceType }), rules: {} });
+  linter.verify(source, {
+    ...configFor({ ...options, sourceType }),
+    rules: {}
+  });
   return linter.getSourceCode().ast;
 }
 

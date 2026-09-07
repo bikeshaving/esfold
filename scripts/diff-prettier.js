@@ -22,9 +22,7 @@ import { Linter } from 'eslint';
 import tseslint from 'typescript-eslint';
 import prettier from 'prettier';
 import fold from '../src/index.ts';
-import {
-  CORPUS, requireCorpus, sample, sourceFiles,
-} from './corpus.js';
+import { CORPUS, requireCorpus, sample, sourceFiles } from './corpus.js';
 
 const linter = new Linter();
 
@@ -53,7 +51,10 @@ for (const repo of requireCorpus()) {
     // comparison silently stops exercising tabs — Prettier defaults to
     // spaces, so its output would arrive space-indented whatever the repo
     // actually uses.
-    const config = (await prettier.resolveConfig(file, { editorconfig: true })) ?? {};
+    const config = (await prettier.resolveConfig(file, {
+      editorconfig: true
+    })) ??
+      {};
     const useTabs = config.useTabs ?? false;
     const tabWidth = config.tabWidth ?? 2;
 
@@ -127,4 +128,6 @@ for (const repo of requireCorpus()) {
 }
 
 const pct = files ? Math.round((agreed / files) * 100) : 0;
-console.log(`\n${agreed} of ${files} files identical (${pct}%), ${hunks} differing hunks`);
+console.log(
+  `\n${agreed} of ${files} files identical (${pct}%), ${hunks} differing hunks`
+);

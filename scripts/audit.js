@@ -21,7 +21,13 @@ import { Linter } from 'eslint';
 import tseslint from 'typescript-eslint';
 import fold from '../src/index.ts';
 import {
-  CORPUS, PARSE_OPTIONS, printWidth, requireCorpus, sample, sourceFiles, tabWidth,
+  CORPUS,
+  PARSE_OPTIONS,
+  printWidth,
+  requireCorpus,
+  sample,
+  sourceFiles,
+  tabWidth,
   stripLocations,
 } from './corpus.js';
 
@@ -42,7 +48,9 @@ const linter = new Linter();
 const configFor = (maxWidth, tab) => ({
   plugins: { esfold: fold },
   linterOptions: { reportUnusedDisableDirectives: 'off' },
-  rules: { 'esfold/breaks': ['error', { maxWidth, tabWidth: tab, join: JOIN }] },
+  rules: {
+    'esfold/breaks': ['error', { maxWidth, tabWidth: tab, join: JOIN }]
+  },
   languageOptions: {
     parser: tseslint.parser,
     ecmaVersion: 'latest',
@@ -68,7 +76,16 @@ function stuckLines(code, maxWidth, tab) {
     .map((message) => `line ${message.line}: ${message.messageId}`);
 }
 
-const totals = { files: 0, changed: 0, crash: 0, ast: 0, idem: 0, stuck: 0, lines: 0, edits: 0 };
+const totals = {
+  files: 0,
+  changed: 0,
+  crash: 0,
+  ast: 0,
+  idem: 0,
+  stuck: 0,
+  lines: 0,
+  edits: 0
+};
 
 for (const repo of requireCorpus()) {
   const dir = join(CORPUS, repo);
@@ -76,7 +93,14 @@ for (const repo of requireCorpus()) {
   const tab = tabWidth(dir);
   const files = sample(sourceFiles(dir), MAX_PER_REPO);
 
-  let n = 0, changed = 0, crash = 0, astBad = 0, idem = 0, stuck = 0, lines = 0, edits = 0;
+  let n = 0,
+    changed = 0,
+    crash = 0,
+    astBad = 0,
+    idem = 0,
+    stuck = 0,
+    lines = 0,
+    edits = 0;
   const kinds = {};
   const notes = [];
 
@@ -102,7 +126,9 @@ for (const repo of requireCorpus()) {
       out = run(code, width, tab).output;
     } catch (error) {
       crash++;
-      if (notes.length < 2) notes.push(`CRASH ${file.slice(dir.length + 1)}: ${error.message}`);
+      if (notes.length < 2) notes.push(
+        `CRASH ${file.slice(dir.length + 1)}: ${error.message}`
+      );
       continue;
     }
     if (out !== code) changed++;
@@ -110,14 +136,18 @@ for (const repo of requireCorpus()) {
     const after = parse(out);
     if (!after || stripLocations(after) !== stripLocations(ast)) {
       astBad++;
-      if (notes.length < 2) notes.push(`AST CHANGED ${file.slice(dir.length + 1)}`);
+      if (notes.length < 2) notes.push(
+        `AST CHANGED ${file.slice(dir.length + 1)}`
+      );
       continue;
     }
     try {
       const twice = run(out, width, tab).output;
       if (twice !== out) {
         idem++;
-        if (notes.length < 2) notes.push(`NOT IDEMPOTENT ${file.slice(dir.length + 1)}`);
+        if (notes.length < 2) notes.push(
+          `NOT IDEMPOTENT ${file.slice(dir.length + 1)}`
+        );
       }
     } catch {
       idem++;
@@ -125,13 +155,20 @@ for (const repo of requireCorpus()) {
     const s = stuckLines(out, width, tab);
     if (s.length) {
       stuck += s.length;
-      if (notes.length < 2) notes.push(`STUCK ${file.slice(dir.length + 1)}: ${s[0]}`);
+      if (notes.length < 2) notes.push(
+        `STUCK ${file.slice(dir.length + 1)}: ${s[0]}`
+      );
     }
   }
 
-  totals.files += n; totals.changed += changed; totals.crash += crash;
-  totals.ast += astBad; totals.idem += idem; totals.stuck += stuck;
-  totals.lines += lines; totals.edits += edits;
+  totals.files += n;
+  totals.changed += changed;
+  totals.crash += crash;
+  totals.ast += astBad;
+  totals.idem += idem;
+  totals.stuck += stuck;
+  totals.lines += lines;
+  totals.edits += edits;
 
   const flag = crash || astBad || idem || stuck ? ' ***' : '';
   console.log(

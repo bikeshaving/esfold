@@ -56,7 +56,10 @@ const withRules = (
 
 const CONFIGS = {
   'two-space': configFor([2, { SwitchCase: 1 }]),
-  'four-space-overrides': configFor([4, { SwitchCase: 1, MemberExpression: 1 }]),
+  'four-space-overrides': configFor([
+    4,
+    { SwitchCase: 1, MemberExpression: 1 }
+  ]),
   tabs: configFor(['tab']),
   // The one @stylistic rule that shares Fold's axis and gets enabled in the
   // wild: both sides must converge with it.
@@ -97,7 +100,10 @@ const CONFIGS = {
     '@stylistic/array-element-newline': ['error', 'always'],
     '@stylistic/object-property-newline': 'error',
     '@stylistic/function-call-argument-newline': ['error', 'always'],
-    '@stylistic/newline-per-chained-call': ['error', { ignoreChainWithDepth: 2 }],
+    '@stylistic/newline-per-chained-call': [
+      'error',
+      { ignoreChainWithDepth: 2 }
+    ],
     '@stylistic/multiline-ternary': ['error', 'always-multiline'],
   }),
 };
@@ -129,9 +135,7 @@ for (const [name, config] of Object.entries(CONFIGS)) {
       if (fatal) continue; // unparseable under this config — not our concern
       exercised++;
       if (first.output !== code) changed++;
-      const second = linter.verifyAndFix(first.output, config, {
-        filename,
-      });
+      const second = linter.verifyAndFix(first.output, config, { filename });
       expect(second.output).toBe(first.output);
     }
     expect(exercised).toBeGreaterThanOrEqual(10);

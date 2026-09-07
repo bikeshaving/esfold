@@ -19,7 +19,14 @@ for (const repo of REPOS) {
   try {
     execFileSync(
       'git',
-      ['clone', '--depth', '1', '--quiet', `https://github.com/${repo}.git`, dir],
+      [
+        'clone',
+        '--depth',
+        '1',
+        '--quiet',
+        `https://github.com/${repo}.git`,
+        dir
+      ],
       { stdio: ['ignore', 'ignore', 'pipe'] },
     );
     console.log('ok');

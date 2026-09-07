@@ -15,7 +15,11 @@ function parseName(file: string) {
   const match = /^(.*?)(?:\.w(\d+))?\.(m?[jt]sx?)$/.exec(file);
   if (!match) throw new Error(`unparseable fixture name: ${file}`);
   const [, name, width, ext] = match;
-  return { name, maxWidth: width ? Number(width) : 80, ts: ext.startsWith('t') };
+  return {
+    name,
+    maxWidth: width ? Number(width) : 80,
+    ts: ext.startsWith('t')
+  };
 }
 
 for (const category of readdirSync(FIXTURES).sort()) {
@@ -27,7 +31,9 @@ for (const category of readdirSync(FIXTURES).sort()) {
       test(name, () => {
         const source = readFileSync(join(FIXTURES, category, file), 'utf8');
         const joinLines = category === 'join';
-        expect(fold(source, { maxWidth, ts, join: joinLines })).toMatchSnapshot();
+        expect(
+          fold(source, { maxWidth, ts, join: joinLines })
+        ).toMatchSnapshot();
       });
     }
   });
