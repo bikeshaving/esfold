@@ -31,8 +31,7 @@ for (const base of BASES) {
     const ast: any = parse(base);
     for (const token of ast.tokens) {
       for (const comment of COMMENTS) {
-        const code =
-          base.slice(0, token.range[0]) +
+        const code = base.slice(0, token.range[0]) +
           comment.text +
           ' ' +
           base.slice(token.range[0]);

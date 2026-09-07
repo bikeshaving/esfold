@@ -11,8 +11,7 @@ import { fold } from './fold.js';
  * about what renders, not a restatement of the whitespace rule the
  * implementation already assumes.
  */
-const emit = (code: string) =>
-  ts
+const emit = (code: string) => ts
     .transpileModule(code, {
       compilerOptions: {
         jsx: ts.JsxEmit.React,

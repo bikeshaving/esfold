@@ -61,9 +61,7 @@ export const PARSE_OPTIONS = {
 
 export function requireCorpus() {
   if (!existsSync(CORPUS) || readdirSync(CORPUS).length === 0) {
-    console.error(
-      `No corpus at ${CORPUS}.\nRun \`npm run corpus\` first (clones ~10 repos, shallow).`,
-    );
+    console.error(`No corpus at ${CORPUS}.\nRun \`npm run corpus\` first (clones ~10 repos, shallow).`);
     process.exit(1);
   }
   return readdirSync(CORPUS)
@@ -201,16 +199,17 @@ const isDroppedByJsx = (node) =>
 // are structural, so the AST already checks them; the token list is compared
 // without them.
 const CLOSERS = new Set([')', ']', '}', '>']);
+// Words a type can follow directly, where a leading `|` or `&` is a lead.
+const LEAD_WORDS = new Set(['as', 'satisfies', 'extends', 'implements', 'keyof', 'infer', 'is', 'typeof']);
 const isDroppedByJoin = (token, prev) =>
   token?.type === 'Punctuator' &&
   (token.value === ',' ||
     token.value === ';' ||
     ((token.value === '|' || token.value === '&') &&
-      prev?.type === 'Punctuator' &&
-      !CLOSERS.has(prev.value)));
+      ((prev?.type === 'Punctuator' && !CLOSERS.has(prev.value)) ||
+        LEAD_WORDS.has(prev?.value))));
 
-export const stripLocations = (node) =>
-  JSON.stringify(node, (key, value) => {
+export const stripLocations = (node) => JSON.stringify(node, (key, value) => {
     // Positions first: `range` is itself an array, so filtering arrays
     // before this test hands back every position in the file and makes
     // every reformatted file look like a semantic change.

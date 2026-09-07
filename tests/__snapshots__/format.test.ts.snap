@@ -162,6 +162,12 @@ exports[`chains > a-call-on-a-continuation-line-indents-from-that-line 1`] = `it
 });
 `;
 
+exports[`chains > a-long-head-breaks-at-every-dot 1`] = `const total = someLongVariableName
+  .map(Number)
+  .filter((n) => n > 0 && patchFlag & n)
+  .map((n) => PatchFlagNames[n]);
+`;
+
 exports[`chains > a-parenthesized-chain-head-is-one-unit-never-broken-inside 1`] = `const result =
   (alphaValue.betaProperty.gammaThing)
   .deltaMethod()
@@ -169,6 +175,12 @@ exports[`chains > a-parenthesized-chain-head-is-one-unit-never-broken-inside 1`]
 `;
 
 exports[`chains > a-parenthesized-sub-chain-can-still-break-on-its-own 1`] = `const r = (first.second).third();
+`;
+
+exports[`chains > a-short-or-capitalized-head-keeps-its-first-call 1`] = `const flagNames = Object.keys(PatchFlagNames)
+  .map(Number)
+  .filter((n) => n > 0 && patchFlag & n)
+  .map((n) => PatchFlagNames[n]);
 `;
 
 exports[`chains > already-formatted-block-body-chain-is-stable 1`] = `promise.then(() => {
@@ -216,6 +228,12 @@ exports[`chains > optional-chaining-breaks-before-the 1`] = `const r = maybeThin
   ?.first(alpha)
   ?.second(beta)
   ?.third(gamma);
+`;
+
+exports[`chains > property-links-stay-with-the-call-after-them 1`] = `expect(scratch.firstChild)
+  .to.have.property("props")
+  .with.all.keys(["oninput"].concat(vnode.props.type ? "type" : []))
+  .and.property("oninput");
 `;
 
 exports[`chains > single-method-call-is-not-a-chain-arguments-break-instead 1`] = `const v = registry.lookup(
@@ -676,11 +694,29 @@ exports[`join > a-lone-assignment-inside-a-broken-chain-does-not-join 1`] = `des
 })
 `;
 
+exports[`join > a-return-with-nested-cast-parens-treats-them-as-one-pair 1`] = `function f() {
+  return /** @type {Record<string, string> | null} */ (
+    /** @type {unknown} */ (feature.status.support)
+  );
+}
+`;
+
+exports[`join > a-short-head-rejoins-its-first-call 1`] = `const text = fs
+  .readFileSync(new URL(\`./templates/\${name}.js\`, import.meta.url), "utf-8")
+  .replace(/\\r\\n/g, "\\n");
+`;
+
+exports[`join > a-signature-with-a-long-return-type-breaks-the-parameters 1`] = `export function parseBunOutput(
+  output: string
+): { passed: number; failed: number } {
+  return null!;
+}
+`;
+
 exports[`join > a-type-literal-that-fits-is-joined 1`] = `type X = { a: string; b: number };
 `;
 
-exports[`join > a-union-too-long-to-join-keeps-its-leading-pipe 1`] = `type U =
-  | AlphaLongTypeName
+exports[`join > a-union-too-long-to-join-is-rebroken-from-the-equals-line 1`] = `type U = AlphaLongTypeName
   | BetaLongTypeName
   | GammaLongTypeName;
 `;
@@ -697,10 +733,25 @@ exports[`join > an-array-of-objects-that-fits-is-joined 1`] = `const rows = [{ i
 exports[`join > an-array-of-single-element-arrays-is-joined 1`] = `const flat = [[1], [2]];
 `;
 
+exports[`join > an-inline-block-comment-does-not-pin-a-group 1`] = `D.equals = function (/** @type {number[]} */ l) {
+  return l;
+};
+if (code.charCodeAt(i) === 10 /* newline char code */) {
+  line++;
+}
+`;
+
 exports[`join > an-interface-body-stays-one-member-per-line 1`] = `interface X {
   a: string;
   b: number;
 }
+`;
+
+exports[`join > an-own-line-comment-pins-its-group 1`] = `const config = {
+  a: 1,
+  // the second one
+  b: 2,
+};
 `;
 
 exports[`join > jsx-attributes-that-fit-are-joined 1`] = `const el = (
@@ -709,14 +760,6 @@ exports[`join > jsx-attributes-that-fit-are-joined 1`] = `const el = (
 `;
 
 exports[`join > nested-groups-join-inside-out 1`] = `foo(bar(a, b), c);
-`;
-
-exports[`join > parameters-join-while-a-broken-return-type-stays 1`] = `export function parseBunOutput(output: string): {
-  passed: number;
-  failed: number;
-} {
-  return null!;
-}
 `;
 
 exports[`join > parens-around-a-return-value-are-joined 1`] = `function f() {
@@ -744,6 +787,14 @@ exports[`operators > a-lone-assignment-is-not-a-break-candidate-the-rhs-breaks-i
   firstArgument,
   secondArgument
 );
+`;
+
+exports[`operators > a-trailing-line-comment-stays-on-its-line 1`] = `const ok =
+  p.type === NodeTypes.DIRECTIVE &&
+  p.name === "bind" &&
+  (!p.arg || // v-bind="obj"
+    p.arg.type !== NodeTypes.SIMPLE_EXPRESSION || // v-bind:[_ctx.foo]
+    !p.arg.isStatic); // v-bind:[foo]
 `;
 
 exports[`operators > additive-splits-before-multiplicative-descends 1`] = `const total = firstFactor *

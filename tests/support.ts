@@ -16,13 +16,15 @@ const IGNORED = new Set(['range', 'loc', 'start', 'end', 'parent']);
 // are structural, so the AST already checks them; the token list is compared
 // without them.
 const CLOSERS = new Set([')', ']', '}', '>']);
+// Words a type can follow directly, where a leading `|` or `&` is a lead.
+const LEAD_WORDS = new Set(['as', 'satisfies', 'extends', 'implements', 'keyof', 'infer', 'is', 'typeof']);
 const isDroppedByJoin = (token: any, prev: any) =>
   token?.type === 'Punctuator' &&
   (token.value === ',' ||
     token.value === ';' ||
     ((token.value === '|' || token.value === '&') &&
-      prev?.type === 'Punctuator' &&
-      !CLOSERS.has(prev.value)));
+      ((prev?.type === 'Punctuator' && !CLOSERS.has(prev.value)) ||
+        LEAD_WORDS.has(prev?.value))));
 
 /** Deep AST comparison value, ignoring position data. */
 export function stripLocations(node: any): any {
@@ -34,8 +36,7 @@ export function stripLocations(node: any): any {
     for (const key of Object.keys(node)) {
       if (IGNORED.has(key)) continue;
       const value = node[key];
-      out[key] =
-        key === 'tokens' && Array.isArray(value)
+      out[key] = key === 'tokens' && Array.isArray(value)
           ? stripLocations(
             value.filter((t, i) => !isDroppedByJoin(t, value[i - 1]))
           )

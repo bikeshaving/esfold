@@ -29,8 +29,7 @@ test('reports and fixes through the rule API', () => {
       {
         code: 'const r = computeThing(firstArgument, secondArgument);',
         options: [{ maxWidth: 40 }],
-        output:
-          'const r = computeThing(\n' +
+        output: 'const r = computeThing(\n' +
           '  firstArgument,\n' +
           '  secondArgument\n' +
           ');',

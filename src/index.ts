@@ -23,10 +23,11 @@ interface Gap {
   join?: string;
   // Operator gaps carry the other side here: a newline on either side counts.
   alt?: { start: number; end: number };
+  // A break Fold removes but never adds: the dot after a short chain head.
+  joinOnly?: boolean;
 }
 
-type GroupKind =
-  | 'chain'
+type GroupKind = | 'chain'
   | 'arrow'
   | 'params'
   | 'operator'
@@ -60,8 +61,7 @@ interface Group {
   host?: Group;
 }
 
-type MessageId =
-  | 'overWidth'
+type MessageId = 'overWidth'
   | 'necessaryBreak'
   | 'inconsistentGroup'
   | 'joinable';
@@ -72,13 +72,6 @@ interface Edit {
   loc: { start: Position; end: Position };
   messageId: MessageId;
   data?: Record<string, string>;
-}
-
-/** A source range plus the indent it will carry once edits apply. */
-interface VLine {
-  indent: string;
-  start: number;
-  end: number;
 }
 
 type OperatorSide = 'before' | 'after';
@@ -173,8 +166,7 @@ function isForbiddenBreak(sourceCode: Source, gap: Gap): boolean {
   // Comments take no part in ASI, so look past them. Including them lets
   // `return /* c */ <break> value` through, silently returning undefined.
   const prev = sourceCode.getTokenBefore(boundary, { includeComments: false });
-  const next =
-    boundary.type === 'Line' || boundary.type === 'Block'
+  const next = boundary.type === 'Line' || boundary.type === 'Block'
       ? sourceCode.getTokenAfter(boundary, { includeComments: false })
       : boundary;
   if (!prev) return false;
@@ -287,18 +279,32 @@ const BINARY_PRECEDENCE = {
 
 // `join` is what a collapsed break becomes: '' for bracket and dot gaps, ' '
 // for comma and operator gaps. Necessary gaps carry none.
+// A line comment on the same line stays on it: nothing can follow it there,
+// so whitespace after a token begins past any such comment.
+function pastLineComments(
+  sourceCode: Source,
+  tokenOrNode: Node | Token,
+): { start: number; next: Token | TSESTree.Comment | null } {
+  let start = tokenOrNode.range[1];
+  let next = sourceCode.getTokenAfter(tokenOrNode, { includeComments: true });
+  while (
+    next &&
+    next.type === 'Line' &&
+    next.loc.start.line === tokenOrNode.loc.end.line
+  ) {
+    start = next.range[1];
+    next = sourceCode.getTokenAfter(next, { includeComments: true });
+  }
+  return { start, next };
+}
+
 function gapAfter(
   sourceCode: Source,
   tokenOrNode: Node | Token,
   join = ''
 ): Gap {
-  const next = sourceCode.getTokenAfter(tokenOrNode, { includeComments: true });
-  return {
-    start: tokenOrNode.range[1],
-    end: next!.range[0],
-    kind: 'item',
-    join
-  };
+  const { start, next } = pastLineComments(sourceCode, tokenOrNode);
+  return { start, end: next!.range[0], kind: 'item', join };
 }
 
 function gapBefore(
@@ -341,8 +347,7 @@ function listGaps(
     const separator = sourceCode.getTokenAfter(items[i]!, {
       filter: isSeparator,
     });
-    const comma =
-      separator && separator.range[0] < items[i + 1]!.range[0]
+    const comma = separator && separator.range[0] < items[i + 1]!.range[0]
         ? separator
         : items[i]!;
     if (comma!.range[0] >= close.range[0]) return null;
@@ -397,14 +402,12 @@ const ARROW_BREAK_BODIES = new Set([
 ]);
 
 function isHuggable(node: Node): boolean {
-  if (
-    node.type === 'ObjectExpression' ||
+  if (node.type === 'ObjectExpression' ||
     node.type === 'ArrayExpression' ||
     // The pattern equivalents, for parameter lists: a lone destructured
     // parameter hugs like an options object.
     node.type === 'ObjectPattern' ||
-    node.type === 'ArrayPattern'
-  ) {
+    node.type === 'ArrayPattern') {
     return true;
   }
   if (
@@ -463,8 +466,7 @@ function callGroup(
   // A trailing function argument keeps the author's layout: the hugged form
   // reads as partially broken though it is deliberate.
   const last = args[args.length - 1];
-  const trailingFunction =
-    last.type === 'FunctionExpression' ||
+  const trailingFunction = last.type === 'FunctionExpression' ||
     last.type === 'ArrowFunctionExpression';
 
   // With exactly one huggable argument first or last, the call never breaks at
@@ -504,12 +506,8 @@ function bracketGroup(
   if (!close) return null;
   const gaps = listGaps(sourceCode, open, close, items);
   return (
-    gaps && {
-      node,
-      range: [open.range[0], close.range[1]] as Range,
-      gaps,
-      items,
-    }
+    gaps &&
+    { node, range: [open.range[0], close.range[1]] as Range, gaps, items }
   );
 }
 
@@ -540,9 +538,23 @@ function returnParensGroup(
   const value = node.argument;
   if (!value) return null;
   const open = sourceCode.getTokenAfter(sourceCode.getFirstToken(node)!);
-  const close = sourceCode.getTokenAfter(value);
-  if (!isPunct(open, '(') || !isPunct(close, ')')) return null;
-  if (open.range[1] > value.range[0]) return null;
+  if (!isPunct(open, '(') || open.range[1] > value.range[0]) return null;
+  // The pair around the whole value: `return (/** cast */ (x))` opens twice.
+  let depth = 0;
+  for (
+    let token: Token | null = open;
+    token && token.range[0] < value.range[0];
+    token = sourceCode.getTokenAfter(token)
+  ) {
+    if (!isPunct(token, '(')) return null;
+    depth++;
+  }
+  let close = sourceCode.getTokenAfter(value);
+  for (let i = 1; i < depth; i++) {
+    if (!isPunct(close, ')')) return null;
+    close = sourceCode.getTokenAfter(close);
+  }
+  if (!isPunct(close, ')')) return null;
   return {
     node,
     range: [open.range[0], close.range[1]],
@@ -594,8 +606,7 @@ function necessaryGroup(sourceCode: Source, node: Node): Group | null {
     case 'SwitchCase': {
       if (node.consequent.length === 0) return null;
       // `case X: {` keeps its brace on the case line
-      const braced =
-        node.consequent.length === 1 &&
+      const braced = node.consequent.length === 1 &&
         node.consequent[0].type === 'BlockStatement';
       return {
         node,
@@ -629,12 +640,29 @@ function isBlockBodyFunction(node: Node): boolean {
   );
 }
 
+// A factory-like head keeps its first call: `Object.keys(x)` and
+// `this.store.get()` read as one name, and a lone `Object` on a line says
+// nothing. A short name does too, but only in a statement of its own, where
+// nothing else competes for the first line. Prettier draws both lines there.
+function isShortHead(head: Node, root: Node, tabWidth: number): boolean {
+  if (head.type === 'ThisExpression' || head.type === 'Super') return true;
+  if (head.type !== 'Identifier') return false;
+  if (/^[A-Z_$]/.test(head.name)) return true;
+  return (
+    head.name.length <= tabWidth &&
+    root.parent?.type === 'ExpressionStatement'
+  );
+}
+
 function methodChainGroup(
   sourceCode: Source,
   node: Node,
   absorbed: Set<Node>,
+  tabWidth: number,
 ): Group | null {
-  const dots = [];
+  const dots: Token[] = [];
+  let headDot: Token | null = null;
+  let headObject: Node | null = null;
   let callLinks = 0;
   let hasBlockBody = false;
   let current = node;
@@ -655,24 +683,40 @@ function methodChainGroup(
           filter: (t) => isPunct(t, '.') || isPunct(t, '?.'),
         });
         if (dot) {
-          dots.push(dot);
           if (fromCall) callLinks++;
+          // A link runs from the dot after a call to the next call:
+          // `.to.have.property('x')` breaks before `.to`, the way Prettier
+          // groups it. The dot after the head is decided once the head is known.
+          const object = current.object;
+          if (object.type === 'CallExpression' || object.type === 'NewExpression') {
+            dots.push(dot);
+          } else {
+            headDot = dot;
+            headObject = object;
+          }
         }
       }
       fromCall = false;
-      if (isParenthesized(sourceCode, current.object)) break;
       current = current.object;
+      if (isParenthesized(sourceCode, current)) break;
     } else {
       break;
     }
   }
   if (callLinks < 2 || hasBlockBody) return null;
+  // The dot after the head: `fs.readFileSync(...)` breaks there like any
+  // link, unless the head is one that keeps its first call. A dot inside a
+  // run of plain members, `.to.have`, is no link at all.
+  if (headObject !== current) headDot = null;
+  const joinOnly = headDot !== null && isShortHead(current, node, tabWidth);
+  if (headDot) dots.push(headDot);
   const gaps: Gap[] = dots
     .map((dot) => {
-      const next = sourceCode.getTokenAfter(dot, { includeComments: true });
+      const { start, next } = pastLineComments(sourceCode, dot);
       return {
         ...gapBefore(sourceCode, dot, 'item'),
-        alt: { start: dot.range[1], end: next!.range[0] },
+        alt: { start, end: next!.range[0] },
+        ...(dot === headDot && joinOnly ? { joinOnly: true } : {}),
       };
     })
     .sort((a, b) => a.start - b.start);
@@ -871,8 +915,9 @@ function jsxGroup(
   if (!attrs || attrs.length < 2) return null;
   const last = sourceCode.getLastToken(node)!;
   const beforeLast = sourceCode.getTokenBefore(last!);
-  const closeToken =
-    node.selfClosing && isPunct(beforeLast, '/') ? beforeLast : last;
+  const closeToken = node.selfClosing && isPunct(beforeLast, '/')
+    ? beforeLast
+    : last;
   return {
     node,
     items: attrs,
@@ -941,11 +986,11 @@ function typeOperatorGroup(
     });
     if (!token) return null;
     const prev = sourceCode.getTokenBefore(token, { includeComments: true });
-    const next = sourceCode.getTokenAfter(token, { includeComments: true });
+    const { start, next } = pastLineComments(sourceCode, token);
     gaps.push({
       start: prev!.range[1],
       end: token.range[0],
-      alt: { start: token.range[1], end: next!.range[0] },
+      alt: { start, end: next!.range[0] },
       kind: 'item',
       join: ' ',
     });
@@ -954,7 +999,11 @@ function typeOperatorGroup(
   const before = sourceCode.getTokenBefore(types[0], { includeComments: true });
   if (isPunct(before, operator)) {
     const prev = sourceCode.getTokenBefore(before, { includeComments: true });
-    if (prev) group.lead = { start: prev.range[1], end: types[0].range[0] };
+    if (prev) {
+      group.lead = { start: prev.range[1], end: types[0].range[0] };
+      // The node's range starts at the leading operator, which a join removes.
+      group.range = [types[0].range[0], types[types.length - 1]!.range[1]];
+    }
   }
   return group;
 }
@@ -1193,7 +1242,8 @@ function chainGroup(
 
 function collectGroups(
   sourceCode: Source,
-  operatorSide: OperatorSide = 'after'
+  operatorSide: OperatorSide = 'after',
+  tabWidth: number = DEFAULT_TAB_WIDTH,
 ) {
   const candidates: Group[] = [];
   const necessary: Group[] = [];
@@ -1223,7 +1273,7 @@ function collectGroups(
         // Chain first: when a call is both a chain root and an argument list,
         // the chain-level break wins, and the selection sort is stable.
         if (!absorbed.has(node)) {
-          const chain = methodChainGroup(sourceCode, node, absorbed);
+          const chain = methodChainGroup(sourceCode, node, absorbed, tabWidth);
           if (chain) candidates.push(chain);
         }
         if (node.type !== 'MemberExpression') {
@@ -1309,8 +1359,8 @@ function collectGroups(
         const close = isPunct(last, ';')
           ? sourceCode.getTokenBefore(last)
           : last;
-        const group =
-          whileKeyword && conditionGroup(sourceCode, node, whileKeyword, close);
+        const group = whileKeyword &&
+          conditionGroup(sourceCode, node, whileKeyword, close);
         if (group) candidates.push(group);
         break;
       }
@@ -1319,8 +1369,7 @@ function collectGroups(
           filter: (t) => isPunct(t, '{'),
         });
         const close = brace && sourceCode.getTokenBefore(brace);
-        const group =
-          close &&
+        const group = close &&
           conditionGroup(
             sourceCode,
             node,
@@ -1464,8 +1513,7 @@ function collectGroups(
       }
       case 'TSTypeAliasDeclaration': {
         const right = node.typeAnnotation;
-        const operator =
-          right &&
+        const operator = right &&
           sourceCode.getTokenBefore(right, { filter: (t) => isPunct(t, '=') });
         if (operator) {
           candidates.push({
@@ -1532,27 +1580,24 @@ const indentCache = new WeakMap();
 const LINE_BREAK = /\r\n|[\n\r\u2028\u2029]/g;
 
 function physicalLines(text: string): VLine[] {
-  const lines = [];
+  const lines: VLine[] = [];
   let start = 0;
   LINE_BREAK.lastIndex = 0;
   let match;
   while ((match = LINE_BREAK.exec(text))) {
-    lines.push({ indent: '', start, end: match.index });
+    lines.push({ indent: '', pieces: [[start, match.index]] });
     start = match.index + match[0].length;
   }
-  lines.push({ indent: '', start, end: text.length });
+  lines.push({ indent: '', pieces: [[start, text.length]] });
   return lines;
 }
 
 function lineWidth(text: string, vline: VLine, tabWidth: number): number {
-  return measureLine(
-    vline.indent + text.slice(vline.start, vline.end),
-    tabWidth
-  );
+  return measureLine(vline.indent + lineText(text, vline), tabWidth);
 }
 
 function lineIndent(text: string, vline: VLine): string {
-  return vline.indent + /^[ \t]*/.exec(text.slice(vline.start, vline.end))![0];
+  return vline.indent + /^[ \t]*/.exec(lineText(text, vline))![0];
 }
 
 // A bare '\n' in a CRLF file leaves mixed endings: a diff on every touched
@@ -1615,6 +1660,63 @@ function inferOperatorSide(sourceCode: Source): OperatorSide {
 
 // Advances one character at a time; re-measuring the whole prefix at each
 // step would be quadratic in the overflow column.
+/** A projected line: pieces of source, with the text joins put between them. */
+interface VLine {
+  indent: string;
+  pieces: (Range | string)[];
+}
+
+function vlStart(vline: VLine): number {
+  for (const piece of vline.pieces) {
+    if (typeof piece !== 'string') return piece[0];
+  }
+  return 0;
+}
+
+function vlEnd(vline: VLine): number {
+  for (let i = vline.pieces.length - 1; i >= 0; i--) {
+    const piece = vline.pieces[i]!;
+    if (typeof piece !== 'string') return piece[1];
+  }
+  return 0;
+}
+
+function lineText(text: string, vline: VLine): string {
+  let out = '';
+  for (const piece of vline.pieces) {
+    out += typeof piece === 'string' ? piece : text.slice(piece[0], piece[1]);
+  }
+  return out;
+}
+
+/** The line's text between two source offsets, joins included. */
+function sliceLine(
+  text: string,
+  vline: VLine,
+  from: number,
+  to: number
+): string {
+  let out = '';
+  let pending = '';
+  let contributed = false;
+  for (const piece of vline.pieces) {
+    if (typeof piece === 'string') {
+      if (contributed) pending += piece;
+      continue;
+    }
+    const start = Math.max(piece[0], from);
+    const end = Math.min(piece[1], to);
+    if (start > end || (start === end && piece[0] !== piece[1])) {
+      if (piece[0] >= to) break;
+      continue;
+    }
+    out += pending + text.slice(start, end);
+    pending = '';
+    contributed = true;
+  }
+  return out;
+}
+
 function overflowStart(
   text: string,
   vline: VLine,
@@ -1622,15 +1724,26 @@ function overflowStart(
   tabWidth: number,
 ): number {
   const indentWidth = measureLine(vline.indent, tabWidth);
-  if (indentWidth > maxWidth) return vline.start;
+  if (indentWidth > maxWidth) return vlStart(vline);
   let width = indentWidth;
-  let offset = vline.start;
-  for (const char of text.slice(vline.start, vline.end)) {
-    width += char === '\t' ? tabWidth - (width % tabWidth) : 1;
-    if (width > maxWidth) return offset;
-    offset += char.length;
+  let lastOffset = vlStart(vline);
+  for (const piece of vline.pieces) {
+    if (typeof piece === 'string') {
+      for (const char of piece) {
+        width += char === '\t' ? tabWidth - (width % tabWidth) : 1;
+      }
+      if (width > maxWidth) return lastOffset;
+      continue;
+    }
+    let offset = piece[0];
+    for (const char of text.slice(piece[0], piece[1])) {
+      width += char === '\t' ? tabWidth - (width % tabWidth) : 1;
+      if (width > maxWidth) return offset;
+      offset += char.length;
+    }
+    lastOffset = piece[1];
   }
-  return vline.end;
+  return vlEnd(vline);
 }
 
 function format(
@@ -1656,11 +1769,13 @@ function format(
   const { candidates, necessary, statementStarts } = collectGroups(
     sourceCode,
     operatorSide,
+    tabWidth,
   );
+  // The layout being decided, as lines of source pieces. Every decision
+  // reshapes the projection; the edits are read off it at the end as the
+  // difference from the source.
   const vlines = physicalLines(text);
-  const edits: Edit[] = [];
   const consumedGaps = new Set<Gap>();
-  const joined = new Set<VLine>();
 
   // Groups can hold distinct gaps over the same whitespace (the last `=` of
   // `a = b = c` is a chain gap and a lone assignment's), so a decided gap is
@@ -1674,6 +1789,11 @@ function format(
     (gap.alt !== undefined && decided.has(rangeKey(gap.alt)));
   const decide = (gap: Gap) => {
     consumedGaps.add(gap);
+    claim(gap);
+  };
+  // A joined gap is claimed so no other group joins the same whitespace, but
+  // stays open to the width pass, which may put the break right back.
+  const claim = (gap: Gap) => {
     decided.add(rangeKey(gap));
     if (gap.alt) decided.add(rangeKey(gap.alt));
   };
@@ -1685,58 +1805,167 @@ function format(
 
   // An operator gap counts as broken when either side carries the newline, so
   // Fold never fights an existing break over which side the operator sits on.
-  const hasBreak = (gap: Gap) =>
+  const textHasBreak = (gap: Gap) =>
     rangeHasBreak(gap) || (gap.alt !== undefined && rangeHasBreak(gap.alt));
 
-  const findLine = (offset: number) => {
-    const index = vlines.findIndex(
-      (vl) => vl.start <= offset && offset < vl.end,
-    );
-    return index === -1
-      ? vlines.findIndex((vl) => vl.start <= offset && offset <= vl.end)
-      : index;
+  /** The whitespace actually holding the newline; operator gaps have two. */
+  const brokenRange = (gap: Gap) =>
+    rangeHasBreak(gap) || !gap.alt ? gap : gap.alt;
+
+  /**
+   * What a join replaces. A close gap's `alt` sits on the other side of a
+   * dangling separator, and the separator goes with the break: `a, b,\n)`
+   * joins to `a, b)`, not `a, b,)`.
+   */
+  const joinRange = (gap: Gap) =>
+    gap.kind === 'close' && gap.alt
+      ? { start: gap.alt.start, end: gap.end }
+      : brokenRange(gap);
+
+  // What has been decided about each gap so far, by position. A gap with no
+  // entry is as the source has it.
+  interface Decision {
+    broken: boolean;
+    gap: Gap;
+    messageId: MessageId;
+    indent?: string;
+  }
+  const decisions = new Map<string, Decision>();
+  const decisionFor = (gap: Gap) =>
+    decisions.get(rangeKey(gap)) ??
+    (gap.alt !== undefined ? decisions.get(rangeKey(gap.alt)) : undefined);
+  const record = (decision: Decision) => {
+    decisions.set(rangeKey(decision.gap), decision);
+    if (decision.gap.alt) decisions.set(rangeKey(decision.gap.alt), decision);
   };
+  const hasBreak = (gap: Gap) =>
+    decisionFor(gap)?.broken ?? textHasBreak(gap);
+
+  // Lines stay in source order through every splice, so the line holding an
+  // offset is a binary search.
+  const findLine = (offset: number) => {
+    let lo = 0;
+    let hi = vlines.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (vlStart(vlines[mid]!) <= offset) lo = mid + 1;
+      else hi = mid;
+    }
+    const index = lo - 1;
+    if (index < 0) return vlines.length > 0 ? 0 : -1;
+    if (offset <= vlEnd(vlines[index]!)) return index;
+    return index + 1 < vlines.length ? index + 1 : index;
+  };
+  const onLine = (vl: VLine, gap: Gap) =>
+    vlStart(vl) <= gap.start && gap.end <= vlEnd(vl);
+  const lineOf = (gap: Gap) => {
+    const index = findLine(gap.start);
+    return index !== -1 && onLine(vlines[index]!, gap) ? index : -1;
+  };
+
+  /** The pieces of a line before a cut and after it, the cut itself dropped. */
+  function splitPieces(
+    pieces: (Range | string)[],
+    cutStart: number,
+    cutEnd: number,
+  ): { before: (Range | string)[]; after: (Range | string)[] } {
+    const before: (Range | string)[] = [];
+    const after: (Range | string)[] = [];
+    let past = false;
+    for (const piece of pieces) {
+      if (typeof piece === 'string') {
+        (past ? after : before).push(piece);
+        continue;
+      }
+      if (piece[1] <= cutStart) {
+        before.push(piece);
+      } else if (piece[0] >= cutEnd) {
+        past = true;
+        after.push(piece);
+      } else {
+        past = true;
+        if (piece[0] < cutStart) before.push([piece[0], cutStart]);
+        if (piece[1] > cutEnd) after.push([cutEnd, piece[1]]);
+      }
+    }
+    while (
+      before.length > 0 && typeof before[before.length - 1] === 'string'
+    ) before.pop();
+    while (after.length > 0 && typeof after[0] === 'string') after.shift();
+    return { before, after };
+  }
+
+  /** Put a break at a gap in the projection, giving the new line an indent. */
+  function breakAt(gap: Gap, indent: string) {
+    const index = lineOf(gap);
+    if (index === -1) return false;
+    const vl = vlines[index]!;
+    const wasBroken = textHasBreak(gap);
+    const cut = wasBroken ? joinRange(gap) : gap;
+    const { before, after } = splitPieces(vl.pieces, cut.start, cut.end);
+    // A dangling separator dropped by a join comes back with the break.
+    if (wasBroken && gap.kind === 'close' && gap.alt) {
+      before.push(text.slice(gap.alt.end, gap.start));
+    }
+    if (before.length === 0 || after.length === 0) return false;
+    vlines.splice(
+      index,
+      1,
+      { indent: vl.indent, pieces: before },
+      { indent, pieces: after },
+    );
+    return true;
+  }
+
+  /** Pull the lines on either side of a broken gap together. */
+  function joinAt(gap: Gap, joinText: string) {
+    return joinCut(joinRange(gap), joinText);
+  }
+
+  function joinCut(cut: { start: number; end: number }, joinText: string) {
+    const first = findLine(cut.start);
+    const last = findLine(cut.end);
+    if (first === -1 || last === -1 || last < first) return false;
+    const { before } = splitPieces(vlines[first]!.pieces, cut.start, cut.end);
+    const { after } = splitPieces(vlines[last]!.pieces, cut.start, cut.end);
+    if (before.length === 0 || after.length === 0) return false;
+    vlines.splice(first, last - first + 1, {
+      indent: vlines[first]!.indent,
+      pieces: [...before, joinText, ...after],
+    });
+    return true;
+  }
 
   function breakGroup(group: Group, messageId: MessageId) {
     const groupStart = (group.range ?? group.node.range)[0];
-    const openLine = vlines[findLine(groupStart)];
+    const openLine = vlines[findLine(groupStart)]!;
     const baseIndent = lineIndent(text, openLine);
     const bracketless = group.kind === 'operator' || group.kind === 'ternary';
-    const startsLine = text.slice(openLine.start, groupStart).trim() === '';
+    const startsLine = sliceLine(
+      text,
+      openLine,
+      vlStart(openLine),
+      groupStart
+    ).trim() ===
+      '';
     // No staircase: a bracket-less group starting a continuation line takes
     // that indent as its level, or its first operand ends up a level shallower.
-    const align =
-      group.flat === true ||
+    const align = group.flat === true ||
       (bracketless && startsLine && !statementStarts.has(groupStart));
     const itemIndent = align ? baseIndent : baseIndent + unit;
 
     for (const gap of group.gaps) {
       consumedGaps.add(gap);
-      if (hasBreak(gap)) continue;
+      if (hasBreak(gap) || gap.joinOnly) continue;
       if (isForbiddenBreak(sourceCode, gap)) continue;
-      const index = vlines.findIndex(
-        (vl) => vl.start <= gap.start && gap.end <= vl.end,
-      );
+      const index = lineOf(gap);
       if (index === -1) continue;
-      const vl = vlines[index];
-      const newIndent =
-        gap.kind === 'close'
+      const vl = vlines[index]!;
+      const newIndent = gap.kind === 'close'
           ? baseIndent
           : gap.kind === 'same' ? lineIndent(text, vl) : itemIndent;
-      vlines.splice(
-        index,
-        1,
-        { indent: vl.indent, start: vl.start, end: gap.start },
-        { indent: newIndent, start: gap.end, end: vl.end },
-      );
-      const loc = sourceCode.getLocFromIndex(gap.end);
-      edits.push({
-        range: [gap.start, gap.end],
-        text: newline + newIndent,
-        loc: { start: loc, end: loc },
-        messageId,
-        data: { maxWidth: String(maxWidth) },
-      });
+      if (!breakAt(gap, newIndent)) continue;
+      record({ broken: true, gap, messageId, indent: newIndent });
     }
   }
 
@@ -1758,73 +1987,74 @@ function format(
     return group.gaps.filter((gap) => gap.kind !== 'close');
   }
 
-  // A partially broken group is an editing artifact rather than a layout, so
-  // it is re-decided by width: joined if it fits, completed if it does not. A
-  // fully broken group is already consistent and is left alone unless `join`
-  // is on, which is what keeps a deliberate layout safe by default. With
-  // `join`, a fully broken group is also pulled back onto one line when it
-  // fits, so width alone decides the layout.
-  function completeGroup(group: Group) {
-    // A gap an enclosing group has decided is left to it.
-    const gaps = ownGaps(group).filter((gap) => !isDecided(gap));
-    const broken = gaps.filter(hasBreak);
-    if (broken.length === 0) return;
-    // A line another group joined this pass still reads as unjoined here, so
-    // any measurement would be stale. The next pass sees the real text.
-    const [spanStart, spanEnd] = joinSpan(group);
-    for (let i = findLine(spanStart); i <= findLine(spanEnd); i++) {
-      if (joined.has(vlines[i]!)) return;
-    }
-    const breakable = gaps.filter((gap) => !isForbiddenBreak(sourceCode, gap));
-    const consistent = broken.length >= breakable.length;
-    if (consistent && !join) return;
-    if (!consistent && (group.addable === false || group.complete === false))
-      return;
-    // A chain broken at some dots is a deliberate head/tail split; completing
-    // it would pull `Object.keys(value)` apart. An arrow's gaps are not peers,
-    // so completing them would break the `=>` of every arrow sitting in an
-    // already-broken call. Both may still be joined when fully broken.
-    const exempt = group.kind === 'chain' || group.kind === 'arrow';
-    if (exempt && !consistent) return;
-
-    // A blank line or a comment inside means the author grouped something
-    // deliberately, and Fold cannot know what.
+  // A blank line or a comment between a group's items means the author
+  // grouped something deliberately, and Fold cannot know what. A comment
+  // belongs to the innermost group around it; the groups outside say nothing.
+  // A block comment sharing its line with code, like a JSDoc cast, travels
+  // with that code and pins nothing.
+  const ownsLine = (comment: TSESTree.Comment) => {
+    if (comment.type === 'Line') return true;
+    const lineStart = text.lastIndexOf('\n', comment.range[0] - 1) + 1;
+    let lineEnd = text.indexOf('\n', comment.range[1]);
+    if (lineEnd === -1) lineEnd = text.length;
+    return (
+      text.slice(lineStart, comment.range[0]).trim() === '' &&
+      text.slice(comment.range[1], lineEnd).trim() === ''
+    );
+  };
+  const pinnedBy = new Map<TSESTree.Comment, Group>();
+  for (const group of [...candidates, ...necessary]) {
     const [rangeStart, rangeEnd] = groupRange(group);
-    if (BLANK_LINE.test(text.slice(rangeStart, rangeEnd))) return;
-    if (
-      sourceCode
-        .getCommentsInside(group.node)
-        .some((c) => rangeStart <= c.range[0] && c.range[1] <= rangeEnd)
-    )
-      return;
-
-    // A group that fits on one line is joined rather than completed: a list
-    // broken at one comma is more likely a stray newline than a layout. When
-    // it does not fit, completing it is the only consistent option.
-    const inline = collapsedText(group);
-    if (inline !== null && joinedFits(group, inline)) {
-      joinGroup(group, consistent ? 'joinable' : 'inconsistentGroup');
-      return;
+    for (const comment of sourceCode.getCommentsInside(group.node)) {
+      if (
+        comment.range[0] < rangeStart || comment.range[1] > rangeEnd
+      ) continue;
+      if (!ownsLine(comment)) continue;
+      const current = pinnedBy.get(comment);
+      if (!current) {
+        pinnedBy.set(comment, group);
+        continue;
+      }
+      const [currentStart, currentEnd] = groupRange(current);
+      if (rangeEnd - rangeStart < currentEnd - currentStart) {
+        pinnedBy.set(comment, group);
+      }
     }
-    if (consistent) {
-      for (const gap of gaps) decide(gap);
-      return;
+  }
+  function holdsAuthorLayout(group: Group): boolean {
+    for (const gap of group.gaps) {
+      if (BLANK_LINE.test(text.slice(gap.start, gap.end))) return true;
+      if (gap.alt && BLANK_LINE.test(text.slice(gap.alt.start, gap.alt.end)))
+        return true;
     }
-    breakGroup(group, 'inconsistentGroup');
+    for (const owner of pinnedBy.values()) if (owner === group) return true;
+    return false;
   }
 
-  /** The whitespace actually holding the newline; operator gaps have two. */
-  const brokenRange = (gap: Gap) => (rangeHasBreak(gap) ? gap : gap.alt!);
+  // Leading operators removed with a join. Not gaps: nothing puts them back.
+  const leadJoins: {
+    range: { start: number; end: number };
+    messageId: MessageId
+  }[] = [];
 
-  /**
-   * What a join replaces. A close gap's `alt` sits on the other side of a
-   * dangling separator, and the separator goes with the break: `a, b,\n)`
-   * joins to `a, b)`, not `a, b,)`.
-   */
-  const joinRange = (gap: Gap) =>
-    gap.kind === 'close' && gap.alt
-      ? { start: gap.alt.start, end: gap.end }
-      : brokenRange(gap);
+  /** Remove every break a group owns from the projection. */
+  function joinGroup(group: Group, messageId: MessageId) {
+    const gaps = ownGaps(group).filter((gap) => !isDecided(gap));
+    let joinedAny = false;
+    for (const gap of gaps) {
+      if (!hasBreak(gap) || !textHasBreak(gap)) {
+        claim(gap);
+        continue;
+      }
+      if (!joinAt(gap, gap.join ?? '')) continue;
+      claim(gap);
+      joinedAny = true;
+      record({ broken: false, gap, messageId });
+    }
+    if (joinedAny && group.lead && joinCut(group.lead, ' ')) {
+      leadJoins.push({ range: group.lead, messageId });
+    }
+  }
 
   /**
    * The text a join rewrites: the group, extended over any gap it borrowed
@@ -1848,21 +2078,49 @@ function format(
    */
   function collapsedText(group: Group): string | null {
     const [start, end] = joinSpan(group);
+    const first = findLine(start);
+    const last = findLine(end);
+    if (first === -1 || last === -1) return null;
     const ranges = ownGaps(group)
       .filter(hasBreak)
       .map((gap) => ({ range: joinRange(gap), join: gap.join ?? '' }))
       .sort((a, b) => a.range.start - b.range.start);
     if (group.lead) ranges.unshift({ range: group.lead, join: ' ' });
-
+    // Any line boundary inside the span that no own gap accounts for is
+    // someone else's break.
+    for (let i = first; i < last; i++) {
+      const boundary = vlEnd(vlines[i]!);
+      if (
+        !ranges.some(
+          (r) => r.range.start <= boundary && boundary <= r.range.end
+        )
+      ) {
+        return null;
+      }
+    }
     let out = '';
     let cursor = start;
-    for (const { range, join } of ranges) {
-      out += text.slice(cursor, range.start) + join;
+    for (const { range, join: joinText } of ranges) {
+      out += sliceLines(text, first, last, cursor, range.start) + joinText;
       cursor = range.end;
     }
-    out += text.slice(cursor, end);
-    LINE_BREAK.lastIndex = 0;
-    return LINE_BREAK.test(out) ? null : out;
+    out += sliceLines(text, first, last, cursor, end);
+    return out;
+  }
+
+  /** The projected text between two offsets, across the lines holding them. */
+  function sliceLines(
+    source: string,
+    first: number,
+    last: number,
+    from: number,
+    to: number,
+  ): string {
+    let out = '';
+    for (let i = first; i <= last; i++) {
+      out += sliceLine(source, vlines[i]!, from, to);
+    }
+    return out;
   }
 
   /** Whether the line the joined group would land on stays within maxWidth. */
@@ -1870,41 +2128,91 @@ function format(
     const [start, end] = joinSpan(group);
     const first = vlines[findLine(start)]!;
     const last = vlines[findLine(end)] ?? first;
-    const head = first.indent + text.slice(first.start, start);
-    const tail = text.slice(end, last.end);
+    const head = first.indent + sliceLine(text, first, vlStart(first), start);
+    const tail = sliceLine(text, last, end, vlEnd(last));
     return measureLine(head + inline + tail, tabWidth) <= maxWidth;
   }
 
-  function joinGroup(group: Group, messageId: MessageId) {
-    const [start, end] = joinSpan(group);
+  // A partially broken group is an editing artifact rather than a layout, so
+  // it is re-decided by width: joined if it fits, completed if it does not. A
+  // fully broken group is already consistent and is left alone, which is what
+  // keeps a deliberate layout safe by default.
+  function completeGroup(group: Group) {
+    // A gap an enclosing group has decided is left to it.
     const gaps = ownGaps(group).filter((gap) => !isDecided(gap));
-    const ranges = gaps
-      .filter(hasBreak)
-      .map((gap) => ({ range: joinRange(gap), join: gap.join ?? '' }));
-    if (group.lead) ranges.push({ range: group.lead, join: ' ' });
-    for (const gap of gaps) decide(gap);
-    for (const { range, join } of ranges) {
-      const loc = sourceCode.getLocFromIndex(range.end);
-      edits.push({
-        range: [range.start, range.end],
-        text: join,
-        loc: { start: loc, end: loc },
-        messageId,
-      });
-    }
-    // The projection still describes the unjoined text, so leave these lines
-    // to the next fix pass rather than measuring them wrong now.
-    for (let i = findLine(start); i <= findLine(end); i++) joined.add(
-      vlines[i]!
+    const broken = gaps.filter(hasBreak);
+    if (broken.length === 0) return;
+    const breakable = gaps.filter(
+      (gap) => !gap.joinOnly && !isForbiddenBreak(sourceCode, gap),
     );
+    if (broken.length >= breakable.length) return;
+    if (group.addable === false || group.complete === false) return;
+    // A chain broken at some dots is a deliberate head/tail split; completing
+    // it would pull `Object.keys(value)` apart. An arrow's gaps are not peers,
+    // so completing them would break the `=>` of every arrow sitting in an
+    // already-broken call.
+    if (group.kind === 'chain' || group.kind === 'arrow') return;
+    if (holdsAuthorLayout(group)) return;
+
+    // A group that fits on one line is joined rather than completed: a list
+    // broken at one comma is more likely a stray newline than a layout. When
+    // it does not fit, completing it is the only consistent option.
+    const inline = collapsedText(group);
+    if (inline !== null && joinedFits(group, inline)) {
+      joinGroup(group, 'inconsistentGroup');
+      return;
+    }
+    breakGroup(group, 'inconsistentGroup');
+  }
+
+  // With `join`, layout is decided from scratch: every break a group owns
+  // comes out of the projection first, and the width pass below puts back
+  // only the ones the text needs. What the author wrote is not consulted,
+  // so the same code always lands on the same layout — except where a blank
+  // line or comment marks a grouping Fold cannot see.
+  function collapseGroup(group: Group) {
+    const gaps = ownGaps(group).filter((gap) => !isDecided(gap));
+    const broken = gaps.filter(hasBreak);
+    if (broken.length === 0) return;
+    const breakable = gaps.filter(
+      (gap) => !gap.joinOnly && !isForbiddenBreak(sourceCode, gap),
+    );
+    const consistent = broken.length >= breakable.length;
+    if (!consistent && (group.addable === false || group.complete === false))
+      return;
+    if (!consistent && (group.kind === 'chain' || group.kind === 'arrow'))
+      return;
+    if (holdsAuthorLayout(group)) return;
+    joinGroup(group, consistent ? 'joinable' : 'inconsistentGroup');
   }
 
   const outermostFirst = [...candidates].sort(
-    (a, b) => groupRange(a)[0] - groupRange(b)[0] ||
+    (a, b) =>
+      groupRange(a)[0] - groupRange(b)[0] ||
       groupRange(b)[1] - groupRange(a)[1],
   );
   for (const group of outermostFirst) {
-    completeGroup(group);
+    if (join) collapseGroup(group);
+    else completeGroup(group);
+  }
+
+  // A literal holding an item that spans lines breaks around it: `{ a: {`
+  // hugs nothing, and the closers would pile up on one line.
+  const LITERALS = new Set([
+    'ObjectExpression',
+    'ArrayExpression',
+    'ObjectPattern',
+    'ArrayPattern',
+    'TSTypeLiteral',
+    'TSTupleType',
+  ]);
+  for (const group of outermostFirst) {
+    if (!LITERALS.has(group.node.type) || !group.items) continue;
+    if (group.gaps.some(hasBreak)) continue;
+    const [start, end] = groupRange(group);
+    if (findLine(start) !== findLine(end)) {
+      breakGroup(group, 'inconsistentGroup');
+    }
   }
 
   // Gap position index. Without it every over-width line scans every candidate
@@ -1917,16 +2225,18 @@ function format(
   const gapStarts = gapIndex.map((entry) => entry.gap.start);
 
   function groupsOnLine(vl: VLine) {
+    const start = vlStart(vl);
+    const end = vlEnd(vl);
     let lo = 0;
     let hi = gapStarts.length;
     while (lo < hi) {
       const mid = (lo + hi) >> 1;
-      if (gapStarts[mid] < vl.start) lo = mid + 1;
+      if (gapStarts[mid]! < start) lo = mid + 1;
       else hi = mid;
     }
     const found = new Set<Group>();
-    for (let i = lo; i < gapIndex.length && gapStarts[i] <= vl.end; i++) {
-      if (gapIndex[i].gap.end <= vl.end) found.add(gapIndex[i].group);
+    for (let i = lo; i < gapIndex.length && gapStarts[i]! <= end; i++) {
+      if (gapIndex[i]!.gap.end <= end) found.add(gapIndex[i]!.group);
     }
     return found;
   }
@@ -1935,11 +2245,13 @@ function format(
   // code fits, and moving the comment down is a vertical-spacing change.
   const comments = sourceCode.getAllComments();
   function overflowIsTrailingComment(vl: VLine) {
+    const lineStart = vlStart(vl);
+    const lineEnd = vlEnd(vl);
     for (const comment of comments) {
       const [start, end] = comment.range;
-      if (start < vl.start || start >= vl.end) continue;
-      if (end < vl.end) continue; // not the tail of the line
-      const code = vl.indent + text.slice(vl.start, start).trimEnd();
+      if (start < lineStart || start >= lineEnd) continue;
+      if (end < lineEnd) continue; // not the tail of the line
+      const code = vl.indent + sliceLine(text, vl, lineStart, start).trimEnd();
       if (measureLine(code, tabWidth) <= maxWidth) return true;
     }
     return false;
@@ -1948,11 +2260,9 @@ function format(
   // Break the outermost group holding the overflow. The cursor does not
   // advance; breakGroup consumes a group's gaps, so this ends by exhaustion.
   for (let cursor = 0; cursor < vlines.length; ) {
-    const vl = vlines[cursor];
+    const vl = vlines[cursor]!;
     if (
-      joined.has(vl) ||
-      lineWidth(text, vl, tabWidth) <= maxWidth ||
-      overflowIsTrailingComment(vl)
+      lineWidth(text, vl, tabWidth) <= maxWidth || overflowIsTrailingComment(vl)
     ) {
       cursor++;
       continue;
@@ -1978,8 +2288,13 @@ function format(
       );
       if (hasInnerCandidate) return false;
       const indent = lineIndent(text, vl) + unit;
-      return measureLine(indent + text.slice(itemStart, itemEnd), tabWidth) >
-        maxWidth;
+      return (
+        measureLine(
+          indent + sliceLine(text, vl, itemStart, itemEnd),
+          tabWidth
+        ) >
+        maxWidth
+      );
     };
 
     // A hug holds only while the head fits through the hugged bracket. Past
@@ -1987,42 +2302,39 @@ function format(
     // earlier argument.
     const hugFails = (group: Group) => {
       const hug = group.hug;
-      if (!hug || hug[0] < vl.start || hug[0] > vl.end) return false;
-      const head = text.slice(vl.start, hug[0] + 1);
+      if (!hug || hug[0] < vlStart(vl) || hug[0] > vlEnd(vl)) return false;
+      const head = sliceLine(text, vl, vlStart(vl), hug[0] + 1);
       return measureLine(vl.indent + head, tabWidth) > maxWidth;
     };
 
-    const onLine = [...groupsOnLine(vl)].filter(
+    const onThisLine = [...groupsOnLine(vl)].filter(
       (group) =>
         (group.addable !== false || hugFails(group)) &&
         !cannotHelp(group) &&
         group.gaps.some(
           (gap) =>
+            !gap.joinOnly &&
             !consumedGaps.has(gap) &&
             !hasBreak(gap) &&
-            vl.start <= gap.start &&
-            gap.end <= vl.end &&
+            onLine(vl, gap) &&
             !isForbiddenBreak(sourceCode, gap),
         ),
     );
     // Last resort, and only when both halves fit: a 200-character string is
     // still 200 characters one line further down.
-    const breakable = onLine.filter((group) => !group.fallback);
+    const breakable = onThisLine.filter((group) => !group.fallback);
     if (breakable.length === 0) {
-      const rescue = onLine.filter(
-        (group) =>
-          group.fallback &&
-          group.gaps.some((gap) => {
+      const rescue = onThisLine.filter((group) =>
+          group.fallback && group.gaps.some((gap) => {
             if (consumedGaps.has(gap) || hasBreak(gap)) return false;
-            const head = text.slice(vl.start, gap.start).trimEnd();
-            const tail = text.slice(gap.end, vl.end);
+            const head = sliceLine(text, vl, vlStart(vl), gap.start).trimEnd();
+            const tail = sliceLine(text, vl, gap.end, vlEnd(vl));
             return (
               measureLine(vl.indent + head, tabWidth) <= maxWidth &&
               measureLine(lineIndent(text, vl) + unit + tail, tabWidth) <=
                 maxWidth
             );
-          }),
-      );
+          }));
       if (rescue.length === 0) {
         cursor++;
         continue;
@@ -2032,7 +2344,7 @@ function format(
           groupRange(a)[0] - groupRange(b)[0] ||
           groupRange(b)[1] - groupRange(a)[1],
       );
-      breakGroup(rescue[0], 'overWidth');
+      breakGroup(rescue[0]!, 'overWidth');
       continue;
     }
 
@@ -2040,17 +2352,16 @@ function format(
     // `assertEqual<A, B>(v)` overflows inside the type arguments, not at `(`.
     // A group ending exactly at the overflow spans it too: breaking its close
     // gap moves the overflowing tail to the next line.
-    const spanning = breakable.filter(
-      (group) => (group.reach ?? groupRange(group)[1]) >= overflow,
-    );
-    const reaching = spanning.filter((group) =>
-      group.gaps.some(
-        (gap) =>
-          gap.start < overflow && !consumedGaps.has(gap) && !hasBreak(gap),
-      ),
-    );
-    const usable =
-      reaching.length > 0
+    const groupEnd = (group: Group) =>
+      Math.max(
+        group.reach ?? 0,
+        groupRange(group)[1],
+        ...group.gaps.map((gap) => gap.end),
+      );
+    const spanning = breakable.filter((group) => groupEnd(group) >= overflow);
+    const reaching = spanning.filter((group) => group.gaps.some((gap) =>
+          !gap.joinOnly && gap.start < overflow && !consumedGaps.has(gap) && !hasBreak(gap)));
+    const usable = reaching.length > 0
         ? reaching
         : spanning.length > 0
           ? spanning
@@ -2066,7 +2377,58 @@ function format(
         groupRange(a)[0] - groupRange(b)[0] ||
         groupRange(b)[1] - groupRange(a)[1],
     );
-    breakGroup(usable[0], 'overWidth');
+    breakGroup(usable[0]!, 'overWidth');
+  }
+
+  // The edits are where the projection differs from the source.
+  const edits: Edit[] = [];
+  const joins: Edit[] = [];
+  const emitted = new Set<string>();
+  for (const decision of decisions.values()) {
+    const { gap, broken, messageId } = decision;
+    const key = rangeKey(gap);
+    if (emitted.has(key)) continue;
+    emitted.add(key);
+    if (broken === textHasBreak(gap)) continue;
+    if (broken) {
+      const loc = sourceCode.getLocFromIndex(gap.end);
+      edits.push({
+        range: [gap.start, gap.end],
+        text: newline + (decision.indent ?? ''),
+        loc: { start: loc, end: loc },
+        messageId,
+        data: { maxWidth: String(maxWidth) },
+      });
+    } else {
+      const range = joinRange(gap);
+      const loc = sourceCode.getLocFromIndex(range.end);
+      joins.push({
+        range: [range.start, range.end],
+        text: gap.join ?? '',
+        loc: { start: loc, end: loc },
+        messageId,
+      });
+    }
+  }
+  for (const { range, messageId } of leadJoins) {
+    const loc = sourceCode.getLocFromIndex(range.end);
+    joins.push({
+      range: [range.start, range.end],
+      text: ' ',
+      loc: { start: loc, end: loc },
+      messageId,
+    });
+  }
+  // A lead covers the gap after the `=` before it; the wider edit does both.
+  for (const edit of joins) {
+    const inside = joins.some(
+      (other) =>
+        other !== edit &&
+        other.range[0] <= edit.range[0] &&
+        edit.range[1] <= other.range[1] &&
+        (other.range[0] < edit.range[0] || edit.range[1] < other.range[1]),
+    );
+    if (!inside) edits.push(edit);
   }
 
   edits.sort((a, b) => b.range[0] - a.range[0]);
