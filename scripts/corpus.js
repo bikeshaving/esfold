@@ -200,7 +200,16 @@ const isDroppedByJsx = (node) =>
 // without them.
 const CLOSERS = new Set([')', ']', '}', '>']);
 // Words a type can follow directly, where a leading `|` or `&` is a lead.
-const LEAD_WORDS = new Set(['as', 'satisfies', 'extends', 'implements', 'keyof', 'infer', 'is', 'typeof']);
+const LEAD_WORDS = new Set([
+  'as',
+  'satisfies',
+  'extends',
+  'implements',
+  'keyof',
+  'infer',
+  'is',
+  'typeof'
+]);
 const isDroppedByJoin = (token, prev) =>
   token?.type === 'Punctuator' &&
   (token.value === ',' ||

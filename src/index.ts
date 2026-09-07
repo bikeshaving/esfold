@@ -649,8 +649,7 @@ function isShortHead(head: Node, root: Node, tabWidth: number): boolean {
   if (head.type !== 'Identifier') return false;
   if (/^[A-Z_$]/.test(head.name)) return true;
   return (
-    head.name.length <= tabWidth &&
-    root.parent?.type === 'ExpressionStatement'
+    head.name.length <= tabWidth && root.parent?.type === 'ExpressionStatement'
   );
 }
 
@@ -688,7 +687,9 @@ function methodChainGroup(
           // `.to.have.property('x')` breaks before `.to`, the way Prettier
           // groups it. The dot after the head is decided once the head is known.
           const object = current.object;
-          if (object.type === 'CallExpression' || object.type === 'NewExpression') {
+          if (
+            object.type === 'CallExpression' || object.type === 'NewExpression'
+          ) {
             dots.push(dot);
           } else {
             headDot = dot;
@@ -2359,8 +2360,15 @@ function format(
         ...group.gaps.map((gap) => gap.end),
       );
     const spanning = breakable.filter((group) => groupEnd(group) >= overflow);
-    const reaching = spanning.filter((group) => group.gaps.some((gap) =>
-          !gap.joinOnly && gap.start < overflow && !consumedGaps.has(gap) && !hasBreak(gap)));
+    const reaching = spanning.filter((group) =>
+      group.gaps.some(
+        (gap) =>
+          !gap.joinOnly &&
+          gap.start < overflow &&
+          !consumedGaps.has(gap) &&
+          !hasBreak(gap)
+      )
+    );
     const usable = reaching.length > 0
         ? reaching
         : spanning.length > 0
