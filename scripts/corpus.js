@@ -218,22 +218,28 @@ const isDroppedByJoin = (token, prev) =>
       ((prev?.type === 'Punctuator' && !CLOSERS.has(prev.value)) ||
         LEAD_WORDS.has(prev?.value))));
 
-export const stripLocations = (node) => JSON.stringify(node, (key, value) => {
-    // Positions first: `range` is itself an array, so filtering arrays
-    // before this test hands back every position in the file and makes
-    // every reformatted file look like a semantic change.
-    if (
-      key === 'range' ||
-      key === 'loc' ||
-      key === 'start' ||
-      key === 'end' ||
-      key === 'parent'
-    )
-      return undefined;
-    if (!Array.isArray(value)) return typeof value === 'bigint'
-      ? `${value}n`
-      : value;
-    const kept = value.filter((v) => !isDroppedByJsx(v));
-    if (key !== 'tokens') return kept;
-    return kept.filter((v, i) => !isDroppedByJoin(v, kept[i - 1]));
-  });
+export const stripLocations = (node) =>
+  JSON.stringify(node, function (key, value) {
+      // JSX drops the whitespace around a line break inside text, so a
+      // reindented line of text is the same text.
+      if (this?.type === 'JSXText' && (key === 'value' || key === 'raw')) {
+        return String(value).replace(/[ \t]*\r?\n[ \t]*/g, '\n');
+      }
+      // Positions first: `range` is itself an array, so filtering arrays
+      // before this test hands back every position in the file and makes
+      // every reformatted file look like a semantic change.
+      if (
+        key === 'range' ||
+        key === 'loc' ||
+        key === 'start' ||
+        key === 'end' ||
+        key === 'parent'
+      )
+        return undefined;
+      if (!Array.isArray(value)) return typeof value === 'bigint'
+        ? `${value}n`
+        : value;
+      const kept = value.filter((v) => !isDroppedByJsx(v));
+      if (key !== 'tokens') return kept;
+      return kept.filter((v, i) => !isDroppedByJoin(v, kept[i - 1]));
+    });

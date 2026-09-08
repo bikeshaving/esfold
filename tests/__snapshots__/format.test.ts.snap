@@ -170,8 +170,8 @@ exports[`chains > a-long-head-breaks-at-every-dot 1`] = `const total = someLongV
 
 exports[`chains > a-parenthesized-chain-head-is-one-unit-never-broken-inside 1`] = `const result =
   (alphaValue.betaProperty.gammaThing)
-  .deltaMethod()
-  .epsilonMethod();
+    .deltaMethod()
+    .epsilonMethod();
 `;
 
 exports[`chains > a-parenthesized-sub-chain-can-still-break-on-its-own 1`] = `const r = (first.second).third();
@@ -544,6 +544,20 @@ exports[`groups > trailing-comma-group-breaks-after-the-trailing-comma 1`] = `co
 exports[`groups > unbreakable-long-string-is-left-entirely-alone 1`] = `const s = 'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
 `;
 
+exports[`hugging > a-test-call-keeps-its-title-and-callback-together 1`] = `it("should call previous remove handler when replacing an event listener", () => {
+  run();
+});
+describe.only(\`a suite with a very long title that does not fit in eighty columns\`, function () {
+  run();
+});
+notATest(
+  "a long title that does not fit in eighty columns, so the hug comes apart",
+  () => {
+    run();
+  }
+);
+`;
+
 exports[`hugging > an-author-broken-un-hugged-form-is-preserved 1`] = `fetchData(
   url,
   { method: 'GET', cache: true }
@@ -559,6 +573,17 @@ exports[`hugging > an-object-bodied-arrow-still-hugs 1`] = `items.map((item) => 
   identifier: item.id,
   label: item.name
 }));
+`;
+
+exports[`hugging > an-unhugged-body-moves-in-a-level 1`] = `runCase(
+  "any bytes in any chunks: no throw, no control byte in a key, next key",
+  async () => {
+    const a = 1;
+    if (a) {
+      run();
+    }
+  }
+);
 `;
 
 exports[`hugging > call-level-breaks-around-a-block-bodied-hug-argument-are-pre 1`] = `runTask(
@@ -595,6 +620,16 @@ exports[`hugging > single-complex-argument-never-breaks-at-the-call-level 1`] = 
   field2: value2,
   field3: value3
 });
+`;
+
+exports[`hugging > template-lines-are-not-reindented 1`] = `const s = wrap(
+  aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,
+  bbbbbbbbbbbbbbbbbbbbbbb,
+  \`
+  keep
+    me
+\`
+);
 `;
 
 exports[`hugging > two-huggable-arguments-disables-hugging-the-call-breaks-norm 1`] = `merge(
@@ -682,6 +717,19 @@ exports[`join > a-hug-whose-head-does-not-fit-breaks-every-argument 1`] = `funct
 exports[`join > a-hugged-arrow-joins-with-the-call-close-paren 1`] = `items.map((item) => compute(item));
 `;
 
+exports[`join > a-kept-break-takes-the-indent-of-its-new-place 1`] = `const value = compute(
+  firstArgument,
+  secondArgument,
+  thirdArgument,
+  fourthArgs,
+  [
+    "alpha-alpha-alpha-alpha-alpha",
+    "beta-beta-beta-beta-beta-beta-beta",
+    "gamma-gamma-gamma-gamma-gamma",
+  ]
+);
+`;
+
 exports[`join > a-lone-assignment-inside-a-broken-chain-does-not-join 1`] = `describe('redirect', function () {
   before(function () {
     this.app.use(function (req, res, next) {
@@ -692,6 +740,12 @@ exports[`join > a-lone-assignment-inside-a-broken-chain-does-not-join 1`] = `des
     })
   })
 })
+`;
+
+exports[`join > a-restored-hug-brings-the-body-back-a-level 1`] = `hash({ password: "foobar" }, function (err, pass, salt, hash) {
+  if (err) throw err;
+  users.tj.salt = salt;
+});
 `;
 
 exports[`join > a-return-with-nested-cast-parens-treats-them-as-one-pair 1`] = `function f() {
@@ -754,12 +808,31 @@ exports[`join > an-own-line-comment-pins-its-group 1`] = `const config = {
 };
 `;
 
+exports[`join > braces-join-the-way-the-file-writes-them 1`] = `import {alpha, beta} from "./mod";
+const point = {x: 1, y: 2};
+const wide = {gamma, delta};
+`;
+
+exports[`join > braces-join-with-spaces-when-the-file-has-them 1`] = `import { alpha, beta } from "./mod";
+const point = { x: 1, y: 2 };
+const wide = { gamma, delta };
+`;
+
 exports[`join > jsx-attributes-that-fit-are-joined 1`] = `const el = (
   <div a="1" b="2" />
 );
 `;
 
 exports[`join > nested-groups-join-inside-out 1`] = `foo(bar(a, b), c);
+`;
+
+exports[`join > parens-around-a-multi-line-return-value-stay-open 1`] = `function F() {
+  return (
+    <p>
+      <a href={company.href}>{company.url}</a>
+    </p>
+  );
+}
 `;
 
 exports[`join > parens-around-a-return-value-are-joined 1`] = `function f() {
@@ -891,9 +964,12 @@ exports[`parity > a-gets-the-same-last-resort-break-as-an 1`] = `const o = {
 };
 `;
 
-exports[`parity > a-hugged-function-signature-is-never-broken 1`] = `it("should ignore X-Forwarded-Proto if socket addr is not trusted", function (done) {
-  run();
-});
+exports[`parity > a-hug-too-long-for-its-line-comes-apart-with-its-body 1`] = `handle(
+  "should ignore X-Forwarded-Proto if socket addr is not trusted",
+  function (done) {
+    run();
+  }
+);
 `;
 
 exports[`parity > a-leading-semicolon-stays-with-the-statement-it-guards 1`] = `function f() {

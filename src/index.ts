@@ -64,7 +64,8 @@ interface Group {
 type MessageId = 'overWidth'
   | 'necessaryBreak'
   | 'inconsistentGroup'
-  | 'joinable';
+  | 'joinable'
+  | 'moved';
 
 interface Edit {
   range: Range;
@@ -326,6 +327,28 @@ function isPunct(
   return !!token && token.type === 'Punctuator' && token.value === value;
 }
 
+// Whether this file puts a space inside braces, read off the braces it
+// already has on one line. Ties and files without any go with the space.
+const braceSpaceCache = new WeakMap<Source, string>();
+function braceSpaceFor(sourceCode: Source): string {
+  let cached = braceSpaceCache.get(sourceCode);
+  if (cached !== undefined) return cached;
+  let spaced = 0;
+  let tight = 0;
+  const tokens = sourceCode.ast.tokens ?? [];
+  for (let i = 0; i + 1 < tokens.length; i++) {
+    const open = tokens[i]!;
+    const next = tokens[i + 1]!;
+    if (!isPunct(open, '{') || isPunct(next, '}')) continue;
+    if (open.loc.end.line !== next.loc.start.line) continue;
+    if (next.range[0] > open.range[1]) spaced++;
+    else tight++;
+  }
+  cached = tight > spaced ? '' : ' ';
+  braceSpaceCache.set(sourceCode, cached);
+  return cached;
+}
+
 function listGaps(
   sourceCode: Source,
   open: Token,
@@ -337,9 +360,9 @@ function listGaps(
   if (items.some((item) => item == null)) return null; // sparse array
   const isSeparator = (t: Token) =>
     separators.some((value) => isPunct(t, value));
-  // Braces keep a space inside when joined (`{ a, b }`); brackets and parens
-  // close up (`[a, b]`, `f(a, b)`).
-  const bracketJoin = isPunct(open, '{') ? ' ' : '';
+  // Braces keep a space inside when joined (`{ a, b }`) unless the file
+  // writes them closed up; brackets and parens close up (`[a, b]`, `f(a, b)`).
+  const bracketJoin = isPunct(open, '{') ? braceSpaceFor(sourceCode) : '';
   const gaps: Gap[] = [gapAfter(sourceCode, open, bracketJoin)];
   for (let i = 0; i < items.length - 1; i++) {
     // A TSPropertySignature's range covers its own `;`, so the next separator
@@ -400,6 +423,58 @@ const ARROW_BREAK_BODIES = new Set([
   'JSXFragment',
   'ArrowFunctionExpression',
 ]);
+
+const TEST_CALL_NAMES = new Set([
+  'it',
+  'test',
+  'describe',
+  'xit',
+  'xtest',
+  'xdescribe',
+  'fit',
+  'ftest',
+  'fdescribe',
+  'beforeEach',
+  'afterEach',
+  'beforeAll',
+  'afterAll',
+  'before',
+  'after',
+]);
+
+// `it("title", () => {` and its relatives, the way Prettier singles them out.
+function isTestCall(node: Node): boolean {
+  if (node.type !== 'CallExpression') return false;
+  let callee: Node = node.callee;
+  while (
+    callee.type === 'MemberExpression' &&
+    !callee.computed &&
+    callee.property.type === 'Identifier' &&
+    /^(only|skip|each|concurrent|todo|sequential)$/.test(callee.property.name)
+  ) {
+    callee = callee.object;
+  }
+  if (callee.type === 'CallExpression') callee = callee.callee;
+  if (callee.type !== 'Identifier' || !TEST_CALL_NAMES.has(callee.name)) {
+    return false;
+  }
+  const args = node.arguments;
+  if (args.length < 1 || args.length > 3) return false;
+  const last = args[args.length - 1]!;
+  if (
+    last.type !== 'FunctionExpression' &&
+    last.type !== 'ArrowFunctionExpression'
+  ) {
+    return false;
+  }
+  if (last.params.length > 1) return false;
+  if (args.length === 1) return true;
+  const first = args[0]!;
+  return (
+    (first.type === 'Literal' && typeof first.value === 'string') ||
+    first.type === 'TemplateLiteral'
+  );
+}
 
 function isHuggable(node: Node): boolean {
   if (node.type === 'ObjectExpression' ||
@@ -1586,19 +1661,16 @@ function physicalLines(text: string): VLine[] {
   LINE_BREAK.lastIndex = 0;
   let match;
   while ((match = LINE_BREAK.exec(text))) {
-    lines.push({ indent: '', pieces: [[start, match.index]] });
+    lines.push(physicalLine(text, start, match.index));
     start = match.index + match[0].length;
   }
-  lines.push({ indent: '', pieces: [[start, text.length]] });
+  lines.push(physicalLine(text, start, text.length));
   return lines;
 }
 
-function lineWidth(text: string, vline: VLine, tabWidth: number): number {
-  return measureLine(vline.indent + lineText(text, vline), tabWidth);
-}
-
-function lineIndent(text: string, vline: VLine): string {
-  return vline.indent + /^[ \t]*/.exec(lineText(text, vline))![0];
+function physicalLine(text: string, start: number, end: number): VLine {
+  const own = /^[ \t]*/.exec(text.slice(start, end))![0];
+  return { pieces: [[start, end]], own };
 }
 
 // A bare '\n' in a CRLF file leaves mixed endings: a diff on every touched
@@ -1663,8 +1735,17 @@ function inferOperatorSide(sourceCode: Source): OperatorSide {
 // step would be quadratic in the overflow column.
 /** A projected line: pieces of source, with the text joins put between them. */
 interface VLine {
-  indent: string;
   pieces: (Range | string)[];
+  // The leading whitespace the source gave the line; '' for a line a break
+  // made, whose text starts at a token.
+  own: string;
+  // Where the line's indentation is measured from: a source offset. However
+  // far the line holding that offset ends up from where the source had it,
+  // this line moves the same way. A line a break made instead indents from
+  // the anchor's line by `extra`.
+  anchor?: number;
+  extra?: string;
+  fresh?: boolean;
 }
 
 function vlStart(vline: VLine): number {
@@ -1721,13 +1802,16 @@ function sliceLine(
 function overflowStart(
   text: string,
   vline: VLine,
+  lead: string,
   maxWidth: number,
   tabWidth: number,
 ): number {
-  const indentWidth = measureLine(vline.indent, tabWidth);
+  const indentWidth = measureLine(lead, tabWidth);
   if (indentWidth > maxWidth) return vlStart(vline);
   let width = indentWidth;
   let lastOffset = vlStart(vline);
+  // The line's own leading whitespace is already counted in the indent.
+  let atStart = true;
   for (const piece of vline.pieces) {
     if (typeof piece === 'string') {
       for (const char of piece) {
@@ -1738,6 +1822,11 @@ function overflowStart(
     }
     let offset = piece[0];
     for (const char of text.slice(piece[0], piece[1])) {
+      if (atStart && (char === ' ' || char === '\t')) {
+        offset += 1;
+        continue;
+      }
+      atStart = false;
       width += char === '\t' ? tabWidth - (width % tabWidth) : 1;
       if (width > maxWidth) return offset;
       offset += char.length;
@@ -1829,7 +1918,7 @@ function format(
     broken: boolean;
     gap: Gap;
     messageId: MessageId;
-    indent?: string;
+    line?: VLine;
   }
   const decisions = new Map<string, Decision>();
   const decisionFor = (gap: Gap) =>
@@ -1857,12 +1946,45 @@ function format(
     if (offset <= vlEnd(vlines[index]!)) return index;
     return index + 1 < vlines.length ? index + 1 : index;
   };
+  /** The rendered line up to an offset: its indentation, then its text. */
+  const prefixTo = (vl: VLine, to: number) =>
+    leading(vl) + sliceLine(text, vl, vlStart(vl), to).replace(/^[ \t]*/, '');
   const onLine = (vl: VLine, gap: Gap) =>
     vlStart(vl) <= gap.start && gap.end <= vlEnd(vl);
   const lineOf = (gap: Gap) => {
     const index = findLine(gap.start);
     return index !== -1 && onLine(vlines[index]!, gap) ? index : -1;
   };
+
+  /** The leading whitespace of the source line holding an offset. */
+  function sourceLeadingAt(offset: number): string {
+    const lineStart = text.lastIndexOf('\n', offset - 1) + 1;
+    return /^[ \t]*/.exec(text.slice(lineStart, lineStart + 400))![0];
+  }
+
+  /** The leading whitespace a line will carry once edits apply. */
+  function leading(vl: VLine, depth = 0): string {
+    if (vl.anchor === undefined || depth > 64) return vl.own;
+    const index = findLine(vl.anchor);
+    const anchorLine = index === -1 ? undefined : vlines[index];
+    if (!anchorLine || anchorLine === vl) return vl.own;
+    const anchorLeading = leading(anchorLine, depth + 1);
+    if (vl.fresh) return anchorLeading + (vl.extra ?? '');
+    // The source indented this line so far beyond (or short of) the anchor's
+    // line; keep that difference from wherever the anchor's line is now.
+    const anchorSrc = sourceLeadingAt(vl.anchor);
+    if (vl.own.startsWith(anchorSrc)) {
+      return anchorLeading + vl.own.slice(anchorSrc.length);
+    }
+    if (anchorSrc.startsWith(vl.own)) {
+      const short = anchorSrc.length - vl.own.length;
+      return anchorLeading.slice(0, Math.max(0, anchorLeading.length - short));
+    }
+    return vl.own;
+  }
+  const lineIndent = (_text: string, vl: VLine) => leading(vl);
+  const lineWidth = (_text: string, vl: VLine, tab: number) =>
+    measureLine(leading(vl) + lineText(text, vl).replace(/^[ \t]*/, ''), tab);
 
   /** The pieces of a line before a cut and after it, the cut itself dropped. */
   function splitPieces(
@@ -1896,27 +2018,41 @@ function format(
     return { before, after };
   }
 
-  /** Put a break at a gap in the projection, giving the new line an indent. */
-  function breakAt(gap: Gap, indent: string) {
+  /**
+   * Put a break at a gap in the projection. The new line indents from `base`
+   * plus `extra`. The line being split keeps its identity, so decisions that
+   * point at it stay current.
+   */
+  function breakAt(
+    gap: Gap,
+    anchors: { fresh: number; kept: number },
+    extra: string,
+  ): VLine | null {
     const index = lineOf(gap);
-    if (index === -1) return false;
+    if (index === -1) return null;
     const vl = vlines[index]!;
     const wasBroken = textHasBreak(gap);
+    const anchor = wasBroken ? anchors.kept : anchors.fresh;
     const cut = wasBroken ? joinRange(gap) : gap;
     const { before, after } = splitPieces(vl.pieces, cut.start, cut.end);
     // A dangling separator dropped by a join comes back with the break.
     if (wasBroken && gap.kind === 'close' && gap.alt) {
       before.push(text.slice(gap.alt.end, gap.start));
     }
-    if (before.length === 0 || after.length === 0) return false;
-    vlines.splice(
-      index,
-      1,
-      { indent: vl.indent, pieces: before },
-      { indent, pieces: after },
-    );
-    return true;
+    if (before.length === 0 || after.length === 0) return null;
+    // A break the source already had keeps the indentation the source gave
+    // its line, relative to the anchor; a new break indents by the group's
+    // rule. Either way the line follows the anchor from here on.
+    const line: VLine = wasBroken
+      ? { pieces: after, own: sourceLeadingAt(cut.end), anchor }
+      : { pieces: after, own: '', anchor, extra, fresh: true };
+    vl.pieces = before;
+    vlines.splice(index + 1, 0, line);
+    return line;
   }
+
+  const groupRange = (group: Group): Range =>
+    (group.range ?? group.node.range) as Range;
 
   /** Pull the lines on either side of a broken gap together. */
   function joinAt(gap: Gap, joinText: string) {
@@ -1927,20 +2063,64 @@ function format(
     const first = findLine(cut.start);
     const last = findLine(cut.end);
     if (first === -1 || last === -1 || last < first) return false;
-    const { before } = splitPieces(vlines[first]!.pieces, cut.start, cut.end);
-    const { after } = splitPieces(vlines[last]!.pieces, cut.start, cut.end);
+    const head = vlines[first]!;
+    const tail = vlines[last]!;
+    const { before } = splitPieces(head.pieces, cut.start, cut.end);
+    const { after } = splitPieces(tail.pieces, cut.start, cut.end);
     if (before.length === 0 || after.length === 0) return false;
-    vlines.splice(first, last - first + 1, {
-      indent: vlines[first]!.indent,
-      pieces: [...before, joinText, ...after],
-    });
+    head.pieces = [...before, joinText, ...after];
+    vlines.splice(first + 1, last - first);
     return true;
+  }
+
+  const BODY_OF_PARENT = new Set([
+    'BlockStatement',
+    'ClassBody',
+    'TSInterfaceBody',
+    'TSModuleBlock',
+    'TSEnumBody',
+  ]);
+  const STANDALONE_PARENTS = new Set([
+    'Program',
+    'BlockStatement',
+    'SwitchCase'
+  ]);
+  // What a group's lines hang from: the bracket that opens it; for a
+  // bracket-less group the start of the line it opens on; for a body, the
+  // start of the statement or function it belongs to, so `for (...) {`
+  // breaking its head does not carry the body along.
+  const statementStartList = [...statementStarts].sort((a, b) => a - b);
+  function statementStartBefore(offset: number): number {
+    let lo = 0;
+    let hi = statementStartList.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (statementStartList[mid]! <= offset) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo > 0 ? statementStartList[lo - 1]! : offset;
+  }
+  // A line a break adds to a bracket-less group indents from the line the
+  // group opens on, wherever that is; a line the source already had keeps
+  // its place relative to the statement, which no join can merge away.
+  function anchorOf(group: Group, groupStart: number, fresh = false): number {
+    if (group.kind === 'operator' || group.kind === 'ternary') {
+      return fresh
+        ? vlStart(vlines[findLine(groupStart)]!)
+        : statementStartBefore(groupStart);
+    }
+    if (BODY_OF_PARENT.has(group.node.type)) {
+      const parent = group.node.parent;
+      if (
+        parent && !STANDALONE_PARENTS.has(parent.type)
+      ) return parent.range[0];
+    }
+    return groupStart;
   }
 
   function breakGroup(group: Group, messageId: MessageId) {
     const groupStart = (group.range ?? group.node.range)[0];
     const openLine = vlines[findLine(groupStart)]!;
-    const baseIndent = lineIndent(text, openLine);
     const bracketless = group.kind === 'operator' || group.kind === 'ternary';
     const startsLine = sliceLine(
       text,
@@ -1953,7 +2133,15 @@ function format(
     // that indent as its level, or its first operand ends up a level shallower.
     const align = group.flat === true ||
       (bracketless && startsLine && !statementStarts.has(groupStart));
-    const itemIndent = align ? baseIndent : baseIndent + unit;
+    const itemExtra = align ? '' : unit;
+    const anchors = {
+      fresh: anchorOf(group, groupStart, true),
+      kept: anchorOf(group, groupStart),
+    };
+    // A close gap an arrow borrowed closes the call, and lines up with it.
+    const closeAnchors = group.host
+      ? { fresh: groupRange(group.host)[0], kept: groupRange(group.host)[0] }
+      : anchors;
 
     for (const gap of group.gaps) {
       consumedGaps.add(gap);
@@ -1962,11 +2150,40 @@ function format(
       const index = lineOf(gap);
       if (index === -1) continue;
       const vl = vlines[index]!;
-      const newIndent = gap.kind === 'close'
-          ? baseIndent
-          : gap.kind === 'same' ? lineIndent(text, vl) : itemIndent;
-      if (!breakAt(gap, newIndent)) continue;
-      record({ broken: true, gap, messageId, indent: newIndent });
+      const line = gap.kind === 'same'
+          ? breakAt(gap, { fresh: vlStart(vl), kept: vlStart(vl) }, '')
+          : gap.kind === 'close'
+            ? breakAt(gap, closeAnchors, '')
+            : breakAt(gap, anchors, itemExtra);
+      if (!line) continue;
+      record({ broken: true, gap, messageId, line });
+    }
+  }
+
+  // Every source line hangs from the innermost group around it: when that
+  // group's anchor moves, the line moves with it.
+  {
+    const anchors = [...candidates, ...necessary]
+      .map((group) => {
+        const [start, end] = groupRange(group);
+        return { start, end, anchor: anchorOf(group, start) };
+      })
+      .sort((a, b) => a.start - b.start || b.end - a.end);
+    const open: { start: number; end: number; anchor: number }[] = [];
+    let next = 0;
+    for (const vl of vlines) {
+      const at = vlStart(vl);
+      while (open.length > 0 && open[open.length - 1]!.end <= at) open.pop();
+      while (next < anchors.length && anchors[next]!.start <= at) {
+        if (anchors[next]!.end > at) open.push(anchors[next]!);
+        next++;
+      }
+      for (let i = open.length - 1; i >= 0; i--) {
+        if (open[i]!.anchor < at) {
+          vl.anchor = open[i]!.anchor;
+          break;
+        }
+      }
     }
   }
 
@@ -1974,8 +2191,6 @@ function format(
     breakGroup(group, 'necessaryBreak');
   }
 
-  const groupRange = (group: Group): Range =>
-    (group.range ?? group.node.range) as Range;
   const BLANK_LINE = /(\r?\n)[ \t]*(\r?\n)/;
 
   // The close gap a trailing arrow borrowed is the call's own whenever the
@@ -2129,7 +2344,7 @@ function format(
     const [start, end] = joinSpan(group);
     const first = vlines[findLine(start)]!;
     const last = vlines[findLine(end)] ?? first;
-    const head = first.indent + sliceLine(text, first, vlStart(first), start);
+    const head = prefixTo(first, start);
     const tail = sliceLine(text, last, end, vlEnd(last));
     return measureLine(head + inline + tail, tabWidth) <= maxWidth;
   }
@@ -2198,7 +2413,9 @@ function format(
   }
 
   // A literal holding an item that spans lines breaks around it: `{ a: {`
-  // hugs nothing, and the closers would pile up on one line.
+  // hugs nothing, and the closers would pile up on one line. Parens around
+  // a multi-line return value do the same: `return (<p>` reads as a hug that
+  // is not one.
   const LITERALS = new Set([
     'ObjectExpression',
     'ArrayExpression',
@@ -2208,7 +2425,11 @@ function format(
     'TSTupleType',
   ]);
   for (const group of outermostFirst) {
-    if (!LITERALS.has(group.node.type) || !group.items) continue;
+    const wrapsValue = group.node.type === 'ReturnStatement' &&
+      group.kind === 'condition';
+    if (
+      !wrapsValue && (!LITERALS.has(group.node.type) || !group.items)
+    ) continue;
     if (group.gaps.some(hasBreak)) continue;
     const [start, end] = groupRange(group);
     if (findLine(start) !== findLine(end)) {
@@ -2252,7 +2473,7 @@ function format(
       const [start, end] = comment.range;
       if (start < lineStart || start >= lineEnd) continue;
       if (end < lineEnd) continue; // not the tail of the line
-      const code = vl.indent + sliceLine(text, vl, lineStart, start).trimEnd();
+      const code = prefixTo(vl, start).trimEnd();
       if (measureLine(code, tabWidth) <= maxWidth) return true;
     }
     return false;
@@ -2268,7 +2489,13 @@ function format(
       cursor++;
       continue;
     }
-    const overflow = overflowStart(text, vl, maxWidth, tabWidth);
+    const overflow = overflowStart(
+      text,
+      vl,
+      lineIndent(text, vl),
+      maxWidth,
+      tabWidth
+    );
     // A lone atomic item already too wide cannot be helped: it lands on its
     // own line at the width it had. Two or more items do shorten the line.
     const cannotHelp = (group: Group) => {
@@ -2304,8 +2531,25 @@ function format(
     const hugFails = (group: Group) => {
       const hug = group.hug;
       if (!hug || hug[0] < vlStart(vl) || hug[0] > vlEnd(vl)) return false;
-      const head = sliceLine(text, vl, vlStart(vl), hug[0] + 1);
-      return measureLine(vl.indent + head, tabWidth) > maxWidth;
+      // A test case keeps its title and callback together whatever the
+      // width, as Prettier does: `it("...", () => {` is one line of a suite.
+      if (isTestCall(group.node)) return false;
+      // The hugged line runs to the bracket that opens the body: for a
+      // function, its `{`; for an expression-bodied arrow, its `=>`.
+      const item = group.items?.find((i) => i && i.range[0] === hug[0]);
+      let headEnd = hug[0] + 1;
+      if (
+        item &&
+        (item.type === 'FunctionExpression' ||
+          item.type === 'ArrowFunctionExpression')
+      ) {
+        headEnd = item.body.type === 'BlockStatement'
+          ? item.body.range[0] + 1
+          : (sourceCode.getTokenBefore(item.body, {
+              filter: (t) => isPunct(t, '=>'),
+            })?.range[1] ?? headEnd);
+      }
+      return measureLine(prefixTo(vl, headEnd), tabWidth) > maxWidth;
     };
 
     const onThisLine = [...groupsOnLine(vl)].filter(
@@ -2328,10 +2572,10 @@ function format(
       const rescue = onThisLine.filter((group) =>
           group.fallback && group.gaps.some((gap) => {
             if (consumedGaps.has(gap) || hasBreak(gap)) return false;
-            const head = sliceLine(text, vl, vlStart(vl), gap.start).trimEnd();
+            const head = prefixTo(vl, gap.start).trimEnd();
             const tail = sliceLine(text, vl, gap.end, vlEnd(vl));
             return (
-              measureLine(vl.indent + head, tabWidth) <= maxWidth &&
+              measureLine(head, tabWidth) <= maxWidth &&
               measureLine(lineIndent(text, vl) + unit + tail, tabWidth) <=
                 maxWidth
             );
@@ -2364,7 +2608,7 @@ function format(
       group.gaps.some(
         (gap) =>
           !gap.joinOnly &&
-          gap.start < overflow &&
+          gap.start <= overflow &&
           !consumedGaps.has(gap) &&
           !hasBreak(gap)
       )
@@ -2402,7 +2646,7 @@ function format(
       const loc = sourceCode.getLocFromIndex(gap.end);
       edits.push({
         range: [gap.start, gap.end],
-        text: newline + (decision.indent ?? ''),
+        text: newline + (decision.line ? leading(decision.line) : ''),
         loc: { start: loc, end: loc },
         messageId,
         data: { maxWidth: String(maxWidth) },
@@ -2439,6 +2683,42 @@ function format(
     if (!inside) edits.push(edit);
   }
 
+  // A source line whose anchor moved takes its indentation along. Text
+  // inside a block comment, a template or JSX text is left alone.
+  const allComments = sourceCode.getAllComments();
+  for (const vl of vlines) {
+    if (vl.fresh || vl.anchor === undefined) continue;
+    const start = vlStart(vl);
+    const lineStart = text.lastIndexOf('\n', start - 1) + 1;
+    const ws = /^[ \t]*/.exec(text.slice(lineStart, lineStart + 400))![0];
+    const content = lineStart + ws.length;
+    if (content < start) continue;
+    // A blank line stays blank.
+    if (
+      content >= text.length || text[content] === '\n' || text[content] === '\r'
+    ) continue;
+    const want = leading(vl);
+    if (want === ws) continue;
+    if (
+      allComments.some((c) => c.range[0] < content && content < c.range[1])
+    ) continue;
+    const node = sourceCode.getNodeByRangeIndex(content);
+    if (
+      node &&
+      (node.type === 'TemplateElement' ||
+        node.type === 'TemplateLiteral' ||
+        node.type === 'JSXText')
+    )
+      continue;
+    const loc = sourceCode.getLocFromIndex(content);
+    edits.push({
+      range: [lineStart, content],
+      text: want,
+      loc: { start: loc, end: loc },
+      messageId: 'moved',
+    });
+  }
+
   edits.sort((a, b) => b.range[0] - a.range[0]);
   return edits;
 }
@@ -2469,6 +2749,7 @@ const breaks: TSESLint.RuleModule<MessageId, Options> = {
       inconsistentGroup:
         'This group is partially broken; break every element or none.',
       joinable: 'This group fits on one line.',
+      moved: 'Indentation follows the line this moved with.',
     },
     defaultOptions: [
       {

@@ -44,7 +44,12 @@ export function stripLocations(node: any): any {
     const out: Record<string, unknown> = {};
     for (const key of Object.keys(node)) {
       if (IGNORED.has(key)) continue;
-      const value = node[key];
+      let value = node[key];
+      // JSX drops the whitespace around a line break inside text, so a
+      // reindented line of text is the same text.
+      if (node.type === 'JSXText' && (key === 'value' || key === 'raw')) {
+        value = String(value).replace(/[ \t]*\r?\n[ \t]*/g, '\n');
+      }
       out[key] = key === 'tokens' && Array.isArray(value)
           ? stripLocations(
             value.filter((t, i) => !isDroppedByJoin(t, value[i - 1]))
