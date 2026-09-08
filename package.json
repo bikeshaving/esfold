@@ -1,6 +1,6 @@
 {
   "name": "eslint-plugin-esfold",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "A single ESLint rule, esfold/breaks, that decides where the newlines go.",
   "repository": {
     "type": "git",
