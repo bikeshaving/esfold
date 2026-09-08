@@ -341,6 +341,9 @@ function braceSpaceFor(sourceCode: Source): string {
     const next = tokens[i + 1]!;
     if (!isPunct(open, '{') || isPunct(next, '}')) continue;
     if (open.loc.end.line !== next.loc.start.line) continue;
+    // JSX braces are always tight and say nothing about object spacing.
+    const owner = sourceCode.getNodeByRangeIndex(open.range[0]);
+    if (owner && owner.type.startsWith('JSX')) continue;
     if (next.range[0] > open.range[1]) spaced++;
     else tight++;
   }
@@ -2412,24 +2415,18 @@ function format(
     else completeGroup(group);
   }
 
-  // A literal holding an item that spans lines breaks around it: `{ a: {`
-  // hugs nothing, and the closers would pile up on one line. Parens around
-  // a multi-line return value do the same: `return (<p>` reads as a hug that
-  // is not one.
-  const LITERALS = new Set([
-    'ObjectExpression',
-    'ArrayExpression',
-    'ObjectPattern',
-    'ArrayPattern',
-    'TSTypeLiteral',
-    'TSTupleType',
-  ]);
+  // A group holding an item that spans lines breaks around it: `{ a: {` and
+  // `render(<div>` hug nothing, and the closers would pile up on one line.
+  // Parens around a multi-line return value do the same.
   for (const group of outermostFirst) {
     const wrapsValue = group.node.type === 'ReturnStatement' &&
       group.kind === 'condition';
-    if (
-      !wrapsValue && (!LITERALS.has(group.node.type) || !group.items)
-    ) continue;
+    // A hug, or a trailing function, holds a multi-line item on purpose.
+    const holdsItems = group.items !== undefined &&
+      group.addable !== false &&
+      group.complete !== false &&
+      group.kind !== 'chain';
+    if (!wrapsValue && !holdsItems) continue;
     if (group.gaps.some(hasBreak)) continue;
     const [start, end] = groupRange(group);
     if (findLine(start) !== findLine(end)) {
@@ -2630,6 +2627,18 @@ function format(
         groupRange(b)[1] - groupRange(a)[1],
     );
     breakGroup(usable[0]!, 'overWidth');
+  }
+
+  // Children never share a line with a tag that spans several: `>{x}` after
+  // a broken attribute list is a shape no JSX rule accepts. Decided last,
+  // once the width pass has settled the tag.
+  for (const group of outermostFirst) {
+    if (group.node.type !== 'JSXElement' || !group.items) continue;
+    if (group.gaps.some(hasBreak)) continue;
+    const tag = group.node.openingElement.range;
+    if (findLine(tag[0]) !== findLine(tag[1])) {
+      breakGroup(group, 'inconsistentGroup');
+    }
   }
 
   // The edits are where the projection differs from the source.

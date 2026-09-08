@@ -645,6 +645,15 @@ exports[`join > a-broken-heritage-clause-joins-down-to-the-extends-break 1`] = `
 	extends Pick<globalThis.HTMLFontElement, "color" | "face" | "size"> {}
 `;
 
+exports[`join > a-call-around-a-multi-line-element-breaks-its-arguments 1`] = `renderer.render(
+  <div>
+    <span>1</span>
+    <span>2</span>
+  </div>,
+  document.body
+);
+`;
+
 exports[`join > a-chain-with-block-bodies-keeps-its-layout 1`] = `promise
   .then(() => {
     return x;
@@ -818,9 +827,24 @@ const point = { x: 1, y: 2 };
 const wide = { gamma, delta };
 `;
 
+exports[`join > children-of-a-multi-line-tag-stay-on-their-own-lines 1`] = `const link = (
+  <a
+    href={\`#/user/\${story.user}\`}
+    style="color: #666; text-decoration: none; font-weight: bold"
+  >
+    {story.user}
+  </a>
+);
+`;
+
 exports[`join > jsx-attributes-that-fit-are-joined 1`] = `const el = (
   <div a="1" b="2" />
 );
+`;
+
+exports[`join > jsx-braces-do-not-count-for-brace-spacing 1`] = `import { div, span } from "./dom";
+const el = <div a={1} b={2}>{div}{span}</div>;
+const wide = { gamma, delta };
 `;
 
 exports[`join > nested-groups-join-inside-out 1`] = `foo(bar(a, b), c);
