@@ -776,6 +776,27 @@ exports[`join > a-signature-with-a-long-return-type-breaks-the-parameters 1`] = 
 }
 `;
 
+exports[`join > a-ternary-with-a-multi-line-branch-keeps-its-branches-broken 1`] = `const el = (
+  <div>
+    {story.domain
+      ? (
+        <span style="color: #666; font-size: 13px;"> ({story.domain})</span>
+      )
+      : null}
+  </div>
+);
+`;
+
+exports[`join > a-ternary-with-a-multi-line-test-keeps-its-branches-broken 1`] = `function f() {
+  const x = someLongCondition &&
+    typeof someLongCondition === "object" &&
+    "b" in someLongCondition
+      ? 1
+      : 2;
+  const y = short ? 1 : 2;
+}
+`;
+
 exports[`join > a-type-literal-that-fits-is-joined 1`] = `type X = { a: string; b: number };
 `;
 

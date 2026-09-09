@@ -923,14 +923,15 @@ function ternaryGroup(
     filter: (t) => isPunct(t, ':'),
   });
   if (!question || !colon) return null;
-  return {
-    node,
-    kind: 'ternary',
-    gaps: [
-      gapBefore(sourceCode, question, 'item', ' '),
-      gapBefore(sourceCode, colon, 'item', ' '),
-    ],
+  // Either side of `?` and `:` may carry the break, as with any operator.
+  const twoSided = (token: Token): Gap => {
+    const { start, next } = pastLineComments(sourceCode, token);
+    return {
+      ...gapBefore(sourceCode, token, 'item', ' '),
+      alt: { start, end: next!.range[0] },
+    };
   };
+  return { node, kind: 'ternary', gaps: [twoSided(question), twoSided(colon)] };
 }
 
 function jsxChildrenGroup(
@@ -1098,14 +1099,15 @@ function conditionalTypeGroup(
     filter: (t) => isPunct(t, ':'),
   });
   if (!question || !colon) return null;
-  return {
-    node,
-    kind: 'ternary',
-    gaps: [
-      gapBefore(sourceCode, question, 'item', ' '),
-      gapBefore(sourceCode, colon, 'item', ' '),
-    ],
+  // Either side of `?` and `:` may carry the break, as with any operator.
+  const twoSided = (token: Token): Gap => {
+    const { start, next } = pastLineComments(sourceCode, token);
+    return {
+      ...gapBefore(sourceCode, token, 'item', ' '),
+      alt: { start, end: next!.range[0] },
+    };
   };
+  return { node, kind: 'ternary', gaps: [twoSided(question), twoSided(colon)] };
 }
 
 // `class A extends B implements C` breaks before each keyword, one level in.
@@ -2169,10 +2171,33 @@ function format(
     const anchors = [...candidates, ...necessary]
       .map((group) => {
         const [start, end] = groupRange(group);
-        return { start, end, anchor: anchorOf(group, start) };
+        const bracketless = group.kind === 'operator' ||
+          group.kind === 'ternary';
+        // Inside a bracket-less group a line strictly inside an operand hangs
+        // from that operand, so a branch that moves takes its lines along. A
+        // line that starts an operand hangs from the statement like the rest.
+        const operands: [number, number][] = [];
+        if (bracketless) {
+          const gaps = [...group.gaps].sort((a, b) => a.start - b.start);
+          let from = start;
+          for (const gap of gaps) {
+            operands.push([
+              from,
+              Math.min(gap.start, gap.alt?.start ?? gap.start)
+            ]);
+            from = Math.max(gap.end, gap.alt?.end ?? gap.end);
+          }
+          operands.push([from, end]);
+        }
+        return { start, end, anchor: anchorOf(group, start), operands };
       })
       .sort((a, b) => a.start - b.start || b.end - a.end);
-    const open: { start: number; end: number; anchor: number }[] = [];
+    const open: {
+      start: number;
+      end: number;
+      anchor: number;
+      operands: [number, number][];
+    }[] = [];
     let next = 0;
     for (const vl of vlines) {
       const at = vlStart(vl);
@@ -2182,8 +2207,12 @@ function format(
         next++;
       }
       for (let i = open.length - 1; i >= 0; i--) {
-        if (open[i]!.anchor < at) {
-          vl.anchor = open[i]!.anchor;
+        let anchor = open[i]!.anchor;
+        for (const [from, to] of open[i]!.operands) {
+          if (from < at && at < to) anchor = from;
+        }
+        if (anchor < at) {
+          vl.anchor = anchor;
           break;
         }
       }
@@ -2429,7 +2458,7 @@ function format(
     if (!wrapsValue && !holdsItems) continue;
     if (group.gaps.some(hasBreak)) continue;
     const [start, end] = groupRange(group);
-    if (findLine(start) !== findLine(end)) {
+    if (findLine(start) !== findLine(end - 1)) {
       breakGroup(group, 'inconsistentGroup');
     }
   }
@@ -2632,12 +2661,20 @@ function format(
   // Children never share a line with a tag that spans several: `>{x}` after
   // a broken attribute list is a shape no JSX rule accepts. Decided last,
   // once the width pass has settled the tag.
+  // A ternary that spans lines anywhere keeps `?` and `:` on lines of their
+  // own, the way Prettier and @stylistic/multiline-ternary have it.
   for (const group of outermostFirst) {
-    if (group.node.type !== 'JSXElement' || !group.items) continue;
     if (group.gaps.some(hasBreak)) continue;
-    const tag = group.node.openingElement.range;
-    if (findLine(tag[0]) !== findLine(tag[1])) {
-      breakGroup(group, 'inconsistentGroup');
+    if (group.node.type === 'JSXElement' && group.items) {
+      const tag = group.node.openingElement.range;
+      if (findLine(tag[0]) !== findLine(tag[1] - 1)) {
+        breakGroup(group, 'inconsistentGroup');
+      }
+    } else if (group.kind === 'ternary') {
+      const [start, end] = groupRange(group);
+      if (findLine(start) !== findLine(end - 1)) {
+        breakGroup(group, 'inconsistentGroup');
+      }
     }
   }
 
