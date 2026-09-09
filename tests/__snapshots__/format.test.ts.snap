@@ -753,6 +753,14 @@ exports[`join > a-lone-assignment-inside-a-broken-chain-does-not-join 1`] = `des
 })
 `;
 
+exports[`join > a-lone-parameter-yields-to-the-return-type-literal 1`] = `export function parseBunOutput(output: string): {
+  passed: number;
+  failed: number;
+} {
+  return null!;
+}
+`;
+
 exports[`join > a-restored-hug-brings-the-body-back-a-level 1`] = `hash({ password: "foobar" }, function (err, pass, salt, hash) {
   if (err) throw err;
   users.tj.salt = salt;
@@ -769,13 +777,6 @@ exports[`join > a-return-with-nested-cast-parens-treats-them-as-one-pair 1`] = `
 exports[`join > a-short-head-rejoins-its-first-call 1`] = `const text = fs
   .readFileSync(new URL(\`./templates/\${name}.js\`, import.meta.url), "utf-8")
   .replace(/\\r\\n/g, "\\n");
-`;
-
-exports[`join > a-signature-with-a-long-return-type-breaks-the-parameters 1`] = `export function parseBunOutput(
-  output: string
-): { passed: number; failed: number } {
-  return null!;
-}
 `;
 
 exports[`join > a-ternary-with-a-multi-line-branch-keeps-its-branches-broken 1`] = `const el = (
@@ -1149,6 +1150,10 @@ exports[`types > a-class-breaks-before-extends-and-implements 1`] = `class HTMLF
 exports[`types > a-conditional-type-breaks-like-a-ternary 1`] = `type Cond<T> = T extends StringLikeThing
   ? TrueBranchType
   : FalseBranch;
+`;
+
+exports[`types > a-lone-type-argument-yields-to-the-break-after-the-equals 1`] = `type MappedEventListenerOrEventListenerObject<T extends string> =
+  MappedEventListener<T> | {handleEvent: MappedEventListener<T>};
 `;
 
 exports[`types > a-long-interface-heritage-breaks-before-extends 1`] = `interface HTMLFontElement

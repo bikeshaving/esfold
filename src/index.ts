@@ -1307,9 +1307,8 @@ function chainGroup(
       filter: (t: Token) => t.value ===
         (member as { operator: string }).operator,
     });
-    const prev = sourceCode.getTokenBefore(operator!, {
-      includeComments: true
-    });
+    const prev =
+      sourceCode.getTokenBefore(operator!, { includeComments: true });
     const next = sourceCode.getTokenAfter(operator!, { includeComments: true });
     const before = { start: prev!.range[1], end: operator!.range[0] };
     const after = { start: operator!.range[1], end: next!.range[0] };
@@ -2535,14 +2534,15 @@ function format(
     );
     // A lone atomic item already too wide cannot be helped: it lands on its
     // own line at the width it had. Two or more items do shorten the line.
-    const cannotHelp = (group: Group) => {
+    // A group around one item with no breaks of its own: `<T>`, `f(x)`.
+    const loneItem = (group: Group) => {
       if (!group.items || group.items.length !== 1) return false;
       const item = group.items[0];
       if (!item || !item.range) return false;
       const [itemStart, itemEnd] = item.range;
       // Excluding the group's own gaps: they sit exactly on the item's edges,
       // and are zero-width when the source has no spaces there.
-      const hasInnerCandidate = gapIndex.some(
+      return !gapIndex.some(
         ({ gap }) =>
           !group.gaps.includes(gap) &&
           itemStart <= gap.start &&
@@ -2551,7 +2551,10 @@ function format(
           !hasBreak(gap) &&
           !isForbiddenBreak(sourceCode, gap),
       );
-      if (hasInnerCandidate) return false;
+    };
+    const cannotHelp = (group: Group) => {
+      if (!loneItem(group)) return false;
+      const [itemStart, itemEnd] = group.items![0]!.range;
       const indent = lineIndent(text, vl) + unit;
       return (
         measureLine(
@@ -2605,8 +2608,19 @@ function format(
     // Last resort, and only when both halves fit: a 200-character string is
     // still 200 characters one line further down.
     const breakable = onThisLine.filter((group) => !group.fallback);
-    if (breakable.length === 0) {
-      const rescue = onThisLine.filter((group) =>
+    // Spending three lines to set one item apart, `<\n  T\n>`, is worse than
+    // the last-resort break after `=`, so lone items come last of all.
+    const worthwhile = breakable.filter((group) => !loneItem(group));
+    const outermost = (groups: Group[]) =>
+      [...groups].sort(
+        (a, b) =>
+          groupRange(a)[0] - groupRange(b)[0] ||
+          groupRange(b)[1] - groupRange(a)[1],
+      )[0];
+    // Last resort, and only when both halves fit: a 200-character string is
+    // still 200 characters one line further down.
+    const rescue = () => outermost(
+      onThisLine.filter((group) =>
           group.fallback && group.gaps.some((gap) => {
             if (consumedGaps.has(gap) || hasBreak(gap)) return false;
             const head = prefixTo(vl, gap.start).trimEnd();
@@ -2616,20 +2630,8 @@ function format(
               measureLine(lineIndent(text, vl) + unit + tail, tabWidth) <=
                 maxWidth
             );
-          }));
-      if (rescue.length === 0) {
-        cursor++;
-        continue;
-      }
-      rescue.sort(
-        (a, b) =>
-          groupRange(a)[0] - groupRange(b)[0] ||
-          groupRange(b)[1] - groupRange(a)[1],
-      );
-      breakGroup(rescue[0]!, 'overWidth');
-      continue;
-    }
-
+          })),
+    );
     // Prefer a group spanning the overflow, then one that reaches it:
     // `assertEqual<A, B>(v)` overflows inside the type arguments, not at `(`.
     // A group ending exactly at the overflow spans it too: breaking its close
@@ -2640,33 +2642,49 @@ function format(
         groupRange(group)[1],
         ...group.gaps.map((gap) => gap.end),
       );
-    const spanning = breakable.filter((group) => groupEnd(group) >= overflow);
-    const reaching = spanning.filter((group) =>
-      group.gaps.some(
-        (gap) =>
-          !gap.joinOnly &&
-          gap.start <= overflow &&
-          !consumedGaps.has(gap) &&
-          !hasBreak(gap)
-      )
-    );
-    const usable = reaching.length > 0
-        ? reaching
-        : spanning.length > 0
-          ? spanning
-          : breakable.filter((group) =>
-              group.gaps.some((gap) => gap.start < overflow),
-            );
-    if (usable.length === 0) {
+    const pick = (pool: Group[]) => {
+      const spanning = pool.filter((group) => groupEnd(group) >= overflow);
+      const reaching = spanning.filter((group) =>
+        group.gaps.some(
+          (gap) =>
+            !gap.joinOnly &&
+            gap.start <= overflow &&
+            !consumedGaps.has(gap) &&
+            !hasBreak(gap),
+        ),
+      );
+      return {
+        reaching: outermost(reaching),
+        spanning: outermost(spanning),
+        before: outermost(
+          pool.filter((group) =>
+            group.gaps.some((gap) => gap.start < overflow)
+          ),
+        ),
+      };
+    };
+    // A group whose break sits past the overflow leaves this line long; the
+    // `=` break, when its halves fit, settles the line in one move. That
+    // holds for a statement's own `=`, not one buried in a `for` head.
+    const good = pick(worthwhile);
+    const rest = pick(breakable);
+    const saved = rescue();
+    const early = saved && statementStarts.has(groupRange(saved)[0])
+      ? saved
+      : undefined;
+    const chosen = good.reaching ??
+      early ??
+      rest.reaching ??
+      good.spanning ??
+      good.before ??
+      saved ??
+      rest.spanning ??
+      rest.before;
+    if (!chosen) {
       cursor++;
       continue;
     }
-    usable.sort(
-      (a, b) =>
-        groupRange(a)[0] - groupRange(b)[0] ||
-        groupRange(b)[1] - groupRange(a)[1],
-    );
-    breakGroup(usable[0]!, 'overWidth');
+    breakGroup(chosen, 'overWidth');
   }
 
   // Children never share a line with a tag that spans several: `>{x}` after
