@@ -133,7 +133,9 @@ exports[`categories > 9-import-specifier-list-breaks-as-an-object-literal 1`] = 
 } from './somewhere.js';
 `;
 
-exports[`categories > a-partially-broken-ternary-that-fits-is-joined 1`] = `const label = isEnabled ? yes : no;
+exports[`categories > a-partially-broken-ternary-is-completed 1`] = `const label = isEnabled
+  ? yes
+  : no;
 `;
 
 exports[`chains > a-braced-case-keeps-its-brace-on-the-case-line 1`] = `switch (kind) {

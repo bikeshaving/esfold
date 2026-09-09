@@ -2401,6 +2401,13 @@ function format(
     // already-broken call.
     if (group.kind === 'chain' || group.kind === 'arrow') return;
     if (holdsAuthorLayout(group)) return;
+    // A ternary broken at one operator is completed, never joined: Prettier
+    // and @stylistic/multiline-ternary both want a ternary that spans lines
+    // to break at both.
+    if (group.kind === 'ternary') {
+      breakGroup(group, 'inconsistentGroup');
+      return;
+    }
 
     // A group that fits on one line is joined rather than completed: a list
     // broken at one comma is more likely a stray newline than a layout. When
@@ -2431,6 +2438,10 @@ function format(
     if (!consistent && (group.kind === 'chain' || group.kind === 'arrow'))
       return;
     if (holdsAuthorLayout(group)) return;
+    if (!consistent && group.kind === 'ternary') {
+      breakGroup(group, 'inconsistentGroup');
+      return;
+    }
     joinGroup(group, consistent ? 'joinable' : 'inconsistentGroup');
   }
 
