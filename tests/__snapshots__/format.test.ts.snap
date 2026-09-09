@@ -1184,6 +1184,14 @@ exports[`types > a-type-literal-breaks-like-an-object-literal 1`] = `type Option
 };
 `;
 
+exports[`types > an-exported-declaration-breaks-after-its-equals-before-a-lone-argument 1`] = `export const Portal =
+  Symbol.for("crank.Portal") as unknown as Component<{root?: object}> & symbol;
+export class CustomEventTarget<TParent extends CustomEventTarget<TParent> = any>
+  implements EventTarget {
+  x = 1;
+}
+`;
+
 exports[`types > an-interface-body-breaks-the-same-way 1`] = `interface Iface {
   alphaValue: string;
   betaValue: number;

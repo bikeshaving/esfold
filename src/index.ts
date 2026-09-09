@@ -159,9 +159,8 @@ function looksLikeOperandEnd(token: Token | null): boolean {
 }
 
 function isForbiddenBreak(sourceCode: Source, gap: Gap): boolean {
-  const boundary = sourceCode.getTokenByRangeStart(gap.end, {
-    includeComments: true,
-  });
+  const boundary =
+    sourceCode.getTokenByRangeStart(gap.end, { includeComments: true });
   if (!boundary) return true;
 
   // Comments take no part in ASI, so look past them. Including them lets
@@ -385,9 +384,8 @@ function listGaps(
       const join = last && isSeparator(last) ? ' ' : `${separators[0]} `;
       gaps.push(gapAfter(sourceCode, comma!, join));
     } else {
-      const beforeComma = sourceCode.getTokenBefore(comma!, {
-        includeComments: true,
-      });
+      const beforeComma =
+        sourceCode.getTokenBefore(comma!, { includeComments: true });
       gaps.push({
         ...gapAfter(sourceCode, comma!, ' '),
         alt: { start: beforeComma!.range[1], end: comma!.range[0] },
@@ -399,9 +397,8 @@ function listGaps(
   const closeGap = gapBefore(sourceCode, close, 'close', bracketJoin);
   const dangling = sourceCode.getTokenBefore(close, { includeComments: true });
   if (dangling && isSeparator(dangling)) {
-    const beforeDangling = sourceCode.getTokenBefore(dangling, {
-      includeComments: true,
-    });
+    const beforeDangling =
+      sourceCode.getTokenBefore(dangling, { includeComments: true });
     closeGap.alt = { start: beforeDangling!.range[1], end: dangling.range[0] };
   }
   gaps.push(closeGap);
@@ -2126,13 +2123,8 @@ function format(
     const groupStart = (group.range ?? group.node.range)[0];
     const openLine = vlines[findLine(groupStart)]!;
     const bracketless = group.kind === 'operator' || group.kind === 'ternary';
-    const startsLine = sliceLine(
-      text,
-      openLine,
-      vlStart(openLine),
-      groupStart
-    ).trim() ===
-      '';
+    const startsLine =
+      sliceLine(text, openLine, vlStart(openLine), groupStart).trim() === '';
     // No staircase: a bracket-less group starting a continuation line takes
     // that indent as its level, or its first operand ends up a level shallower.
     const align = group.flat === true ||
@@ -2515,6 +2507,24 @@ function format(
     return false;
   }
 
+  // Whether an assignment is the statement's own, rather than one inside a
+  // `for` head or an expression.
+  function ownsStatement(node: Node): boolean {
+    if (node.type === 'TSTypeAliasDeclaration') return true;
+    if (node.type === 'AssignmentExpression') {
+      return node.parent?.type === 'ExpressionStatement';
+    }
+    if (node.type === 'VariableDeclarator') {
+      const holder = node.parent?.parent?.type;
+      return (
+        holder !== 'ForStatement' &&
+        holder !== 'ForInStatement' &&
+        holder !== 'ForOfStatement'
+      );
+    }
+    return false;
+  }
+
   // Break the outermost group holding the overflow. The cursor does not
   // advance; breakGroup consumes a group's gaps, so this ends by exhaustion.
   for (let cursor = 0; cursor < vlines.length; ) {
@@ -2539,6 +2549,9 @@ function format(
       if (!group.items || group.items.length !== 1) return false;
       const item = group.items[0];
       if (!item || !item.range) return false;
+      // A single item in a type is never worth its own line, whatever it
+      // holds: `Component<{root?: object}>` reads as one name.
+      if (group.node.type.startsWith('TS')) return true;
       const [itemStart, itemEnd] = item.range;
       // Excluding the group's own gaps: they sit exactly on the item's edges,
       // and are zero-width when the source has no spaces there.
@@ -2669,9 +2682,7 @@ function format(
     const good = pick(worthwhile);
     const rest = pick(breakable);
     const saved = rescue();
-    const early = saved && statementStarts.has(groupRange(saved)[0])
-      ? saved
-      : undefined;
+    const early = saved && ownsStatement(saved.node) ? saved : undefined;
     const chosen = good.reaching ??
       early ??
       rest.reaching ??

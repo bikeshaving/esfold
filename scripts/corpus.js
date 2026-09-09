@@ -166,9 +166,8 @@ export function printWidth(dir) {
     '.editorconfig',
   ]) {
     const text = read(name);
-    const match = text?.match(
-      /(?:printWidth|max_line_length)"?\s*[:=]\s*"?(\d+)/
-    );
+    const match =
+      text?.match(/(?:printWidth|max_line_length)"?\s*[:=]\s*"?(\d+)/);
     if (match) return Number(match[1]);
   }
   const pkg = read('package.json');
