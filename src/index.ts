@@ -2874,7 +2874,7 @@ const breaks: TSESLint.RuleModule<MessageId, Options> = {
 // registering the plugin — and it could not carry `maxWidth`, which is the
 // reason to configure this at all.
 const plugin: ESLint.Plugin = {
-  meta: { name: 'eslint-plugin-esfold', version: '0.1.5' },
+  meta: { name: 'eslint-plugin-esfold', version: '0.1.6' },
   // ESLint types rules against ESTree; this one is typed against TSESTree so
   // it can walk TypeScript nodes. The shapes are identical at runtime.
   rules: { breaks: breaks as unknown as Rule.RuleModule },
