@@ -2562,6 +2562,13 @@ function format(
       // A single item in a type is never worth its own line, whatever it
       // holds: `Component<{root?: object}>` reads as one name.
       if (group.node.type.startsWith('TS')) return true;
+      // A lone parameter is worth its own line unless the return type is a
+      // body that hugs. `f(x: string): {` puts the object where it reads;
+      // `f(x: string): A |` strands the rest of the union on the next line.
+      if (group.kind === 'params') {
+        const returnType = (group.node as TSESTree.FunctionLike).returnType;
+        return returnType?.typeAnnotation.type === 'TSTypeLiteral';
+      }
       const [itemStart, itemEnd] = item.range;
       // Excluding the group's own gaps: they sit exactly on the item's edges,
       // and are zero-width when the source has no spaces there.
