@@ -376,7 +376,9 @@ line two \${value}
 line three\`;
 `;
 
-exports[`edges > a-single-atomic-argument-wider-than-the-limit-is-left-inline 1`] = `callSomething("xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+exports[`edges > a-single-atomic-argument-wider-than-the-limit-still-breaks-the-call 1`] = `callSomething(
+  "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+);
 `;
 
 exports[`edges > a-template-too-long-to-fix-is-silent-not-reported 1`] = `const t = \`xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx\${value}\`;

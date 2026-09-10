@@ -2579,13 +2579,14 @@ function format(
       if (!loneItem(group)) return false;
       const [itemStart, itemEnd] = group.items![0]!.range;
       const indent = lineIndent(text, vl) + unit;
-      return (
-        measureLine(
-          indent + sliceLine(text, vl, itemStart, itemEnd),
-          tabWidth
-        ) >
-        maxWidth
+      const broken = measureLine(
+        indent + sliceLine(text, vl, itemStart, itemEnd),
+        tabWidth
       );
+      // Breaking is worth it whenever it shortens the longest line, even if
+      // the item still overflows: the call comes back under width even when
+      // the string it holds cannot.
+      return broken > maxWidth && broken >= lineWidth(text, vl, tabWidth);
     };
 
     // A hug holds only while the head fits through the hugged bracket. Past
