@@ -476,14 +476,24 @@ function isTestCall(node: Node): boolean {
   );
 }
 
+// A parameter's own type annotation is a second body. Hugging the pattern
+// breaks both of them, and the signature ends on two exploded braces, so a
+// parameter carrying one declines the hug and the list takes the break.
+function hasLiteralType(
+  node: TSESTree.ObjectPattern | TSESTree.ArrayPattern,
+): boolean {
+  const annotation = node.typeAnnotation?.typeAnnotation;
+  return annotation?.type === 'TSTypeLiteral' && annotation.members.length > 0;
+}
+
 function isHuggable(node: Node): boolean {
-  if (node.type === 'ObjectExpression' ||
-    node.type === 'ArrayExpression' ||
-    // The pattern equivalents, for parameter lists: a lone destructured
-    // parameter hugs like an options object.
-    node.type === 'ObjectPattern' ||
-    node.type === 'ArrayPattern') {
+  if (node.type === 'ObjectExpression' || node.type === 'ArrayExpression') {
     return true;
+  }
+  // The pattern equivalents, for parameter lists: a lone destructured
+  // parameter hugs like an options object.
+  if (node.type === 'ObjectPattern' || node.type === 'ArrayPattern') {
+    return !hasLiteralType(node);
   }
   if (
     node.type === 'FunctionExpression' ||
