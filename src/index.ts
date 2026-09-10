@@ -2565,9 +2565,15 @@ function format(
       // A lone parameter is worth its own line unless the return type is a
       // body that hugs. `f(x: string): {` puts the object where it reads;
       // `f(x: string): A |` strands the rest of the union on the next line.
+      // A parameter carrying a union of its own keeps the line either way,
+      // since yielding hands the break to that union instead.
       if (group.kind === 'params') {
         const returnType = (group.node as TSESTree.FunctionLike).returnType;
-        return returnType?.typeAnnotation.type === 'TSTypeLiteral';
+        if (returnType?.typeAnnotation.type !== 'TSTypeLiteral') return false;
+        const annotation = (item as TSESTree.Parameter & {
+          typeAnnotation?: TSESTree.TSTypeAnnotation;
+        }).typeAnnotation?.typeAnnotation.type;
+        return annotation !== 'TSUnionType' && annotation !== 'TSIntersectionType';
       }
       const [itemStart, itemEnd] = item.range;
       // Excluding the group's own gaps: they sit exactly on the item's edges,
