@@ -1221,11 +1221,15 @@ function colonGroup(
   const keyEnd = node.key ? node.key.range[1] : node.range[0];
   if (!colon || colon.range[0] < keyEnd || colon.range[1] > value.range[0])
     return null;
+  // A type member's colon stays a last resort. Breaking it splits a type
+  // literal mid-property, `Component<{value:` over two lines, where breaking
+  // whatever encloses the literal keeps it whole.
+  const value_ = node.type === 'TSPropertySignature' ? undefined : value;
   return {
     node,
     kind: 'assign',
-    fallback: !isOperandList(value),
-    listRange: headList(value)?.range,
+    fallback: value_ === undefined || !isOperandList(value_),
+    listRange: value_ && headList(value_)?.range,
     gaps: [gapAfter(sourceCode, colon, ' ')],
   };
 }
