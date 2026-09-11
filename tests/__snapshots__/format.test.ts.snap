@@ -922,12 +922,13 @@ exports[`operators > a-trailing-line-comment-stays-on-its-line 1`] = `const ok =
     !p.arg.isStatic); // v-bind:[foo]
 `;
 
-exports[`operators > additive-splits-before-multiplicative-descends 1`] = `const total = firstFactor *
-  secondFactor +
+exports[`operators > additive-splits-before-multiplicative-descends 1`] = `const total =
+  firstFactor * secondFactor +
   thirdFactor * fourthFactor;
 `;
 
-exports[`operators > additive-splits-before-multiplicative-descends-2 1`] = `const total = firstFactor * secondFactor +
+exports[`operators > additive-splits-before-multiplicative-descends-2 1`] = `const total =
+  firstFactor * secondFactor +
   thirdFactor * fourthFactor;
 `;
 

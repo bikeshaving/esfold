@@ -1218,7 +1218,7 @@ function colonGroup(
   return {
     node,
     kind: 'assign',
-    fallback: true,
+    fallback: !isOperandList(value),
     gaps: [gapAfter(sourceCode, colon, ' ')],
   };
 }
@@ -1227,11 +1227,18 @@ function colonGroup(
 // before the first one leaves that one riding the header, at an indent no
 // other operand shares, so the header's own break comes first.
 function isOperandList(node: Node): boolean {
-  return (
-    node.type === 'TSUnionType' ||
-    node.type === 'TSIntersectionType' ||
-    node.type === 'LogicalExpression'
-  );
+  if (node.type === 'TSUnionType' || node.type === 'TSIntersectionType') {
+    // A list whose last operand is a body keeps hugging it, so
+    // `type T = Document & {` stays whole rather than setting the brace apart.
+    const last = node.types[node.types.length - 1];
+    return last?.type !== 'TSTypeLiteral';
+  }
+
+  if (node.type === 'LogicalExpression' || node.type === 'BinaryExpression') {
+    return !isHuggable(node.right);
+  }
+
+  return false;
 }
 
 function assignmentGroup(
