@@ -793,7 +793,8 @@ exports[`join > a-ternary-with-a-multi-line-branch-keeps-its-branches-broken 1`]
 `;
 
 exports[`join > a-ternary-with-a-multi-line-test-keeps-its-branches-broken 1`] = `function f() {
-  const x = someLongCondition &&
+  const x =
+    someLongCondition &&
     typeof someLongCondition === "object" &&
     "b" in someLongCondition
       ? 1

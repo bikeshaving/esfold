@@ -59,6 +59,10 @@ interface Group {
   lead?: { start: number; end: number };
   // The call whose close gap a trailing arrow's group borrowed.
   host?: Group;
+  // An operand list this group heads. Once the width pass has settled, a
+  // list that ended up spanning lines takes the header break too, whether or
+  // not the header line was ever too long.
+  listRange?: Range;
 }
 
 type MessageId = 'overWidth'
@@ -858,6 +862,7 @@ function conditionGroup(
   node: Node,
   openAnchor: Node | Token,
   close: Token | null,
+  test?: Node,
 ): Group | null {
   const open = sourceCode.getTokenAfter(openAnchor, {
     filter: (t) => isPunct(t, '('),
@@ -868,6 +873,7 @@ function conditionGroup(
     node,
     range: [open.range[0], close.range[1]],
     kind: 'condition',
+    listRange: test && headList(test)?.range,
     gaps: [gapAfter(sourceCode, open), gapBefore(sourceCode, close, 'close')],
   };
 }
@@ -1219,6 +1225,7 @@ function colonGroup(
     node,
     kind: 'assign',
     fallback: !isOperandList(value),
+    listRange: headList(value)?.range,
     gaps: [gapAfter(sourceCode, colon, ' ')],
   };
 }
@@ -1226,6 +1233,18 @@ function colonGroup(
 // The operands of a chain or a union are peers. Breaking between them but not
 // before the first one leaves that one riding the header, at an indent no
 // other operand shares, so the header's own break comes first.
+// The list whose first operand would land on the header line. A ternary puts
+// its condition there, so a condition that is itself a list is the one that
+// would ride.
+function headList(node: Node): Node | undefined {
+  if (isOperandList(node)) return node;
+  if (node.type === 'ConditionalExpression' && isOperandList(node.test)) {
+    return node.test;
+  }
+
+  return undefined;
+}
+
 function isOperandList(node: Node): boolean {
   return (
     node.type === 'TSUnionType' ||
@@ -1249,6 +1268,7 @@ function assignmentGroup(
     node,
     kind: 'assign',
     fallback: !isOperandList(right),
+    listRange: headList(right)?.range,
     gaps: [gapAfter(sourceCode, operator, ' ')],
   };
 }
@@ -1432,6 +1452,7 @@ function collectGroups(
           node,
           sourceCode.getFirstToken(node)!,
           close,
+          node.test,
         );
         if (group) candidates.push(group);
         break;
@@ -1446,6 +1467,7 @@ function collectGroups(
           node,
           sourceCode.getFirstToken(node)!,
           close,
+          node.test,
         );
         if (group) candidates.push(group);
         break;
@@ -1459,7 +1481,7 @@ function collectGroups(
           ? sourceCode.getTokenBefore(last)
           : last;
         const group = whileKeyword &&
-          conditionGroup(sourceCode, node, whileKeyword, close);
+          conditionGroup(sourceCode, node, whileKeyword, close, node.test);
         if (group) candidates.push(group);
         break;
       }
@@ -1619,6 +1641,7 @@ function collectGroups(
             node,
             kind: 'assign',
             fallback: !isOperandList(right),
+            listRange: headList(right)?.range,
             gaps: [gapAfter(sourceCode, operator, ' ')],
           });
         }
@@ -2748,6 +2771,15 @@ function format(
       }
     } else if (group.kind === 'ternary') {
       const [start, end] = groupRange(group);
+      if (findLine(start) !== findLine(end - 1)) {
+        breakGroup(group, 'inconsistentGroup');
+      }
+    } else if (join && group.listRange) {
+      // The header line may fit while the list below it does not, and then
+      // nothing above has asked for this break. A member on the header sits
+      // at an indent no other member shares, so the list takes it anyway.
+      // Only with `join`: without it, a layout the author wrote stands.
+      const [start, end] = group.listRange;
       if (findLine(start) !== findLine(end - 1)) {
         breakGroup(group, 'inconsistentGroup');
       }
