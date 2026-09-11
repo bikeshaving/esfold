@@ -1223,6 +1223,17 @@ function colonGroup(
   };
 }
 
+// The operands of a chain or a union are peers. Breaking between them but not
+// before the first one leaves that one riding the header, at an indent no
+// other operand shares, so the header's own break comes first.
+function isOperandList(node: Node): boolean {
+  return (
+    node.type === 'TSUnionType' ||
+    node.type === 'TSIntersectionType' ||
+    node.type === 'LogicalExpression'
+  );
+}
+
 function assignmentGroup(
   sourceCode: Source,
   node: TSESTree.AssignmentExpression | TSESTree.VariableDeclarator,
@@ -1236,7 +1247,7 @@ function assignmentGroup(
   return {
     node,
     kind: 'assign',
-    fallback: true,
+    fallback: !isOperandList(right),
     gaps: [gapAfter(sourceCode, operator, ' ')],
   };
 }
@@ -1606,7 +1617,7 @@ function collectGroups(
           candidates.push({
             node,
             kind: 'assign',
-            fallback: true,
+            fallback: !isOperandList(right),
             gaps: [gapAfter(sourceCode, operator, ' ')],
           });
         }

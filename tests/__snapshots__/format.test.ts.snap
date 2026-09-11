@@ -805,7 +805,8 @@ exports[`join > a-ternary-with-a-multi-line-test-keeps-its-branches-broken 1`] =
 exports[`join > a-type-literal-that-fits-is-joined 1`] = `type X = { a: string; b: number };
 `;
 
-exports[`join > a-union-too-long-to-join-is-rebroken-from-the-equals-line 1`] = `type U = AlphaLongTypeName
+exports[`join > a-union-too-long-to-join-is-rebroken-from-the-equals-line 1`] = `type U =
+  AlphaLongTypeName
   | BetaLongTypeName
   | GammaLongTypeName;
 `;
@@ -901,7 +902,8 @@ exports[`operators > a-comma-first-group-with-a-dangling-comma-is-already-consis
 
 exports[`operators > a-file-that-already-breaks-before-operators-keeps-that-side 1`] = `const existing = someCondition
   && otherCondition;
-const all = alphaCondition
+const all =
+  alphaCondition
   || betaCondition
   || gammaCondition;
 `;
@@ -947,7 +949,8 @@ exports[`operators > assignment-chain-breaks-at-the-s 1`] = `firstTarget =
   someSharedDefaultValue;
 `;
 
-exports[`operators > breaks-at-before-touching 1`] = `const check = condition1 && condition2 ||
+exports[`operators > breaks-at-before-touching 1`] = `const check =
+  condition1 && condition2 ||
   condition3 && condition4;
 `;
 
@@ -965,21 +968,25 @@ exports[`operators > descends-to-the-next-precedence-level-only-when-still-too-l
   fourthLongCondition;
 `;
 
-exports[`operators > equal-precedence-run-breaks-at-every-operator 1`] = `const all = alphaCondition ||
+exports[`operators > equal-precedence-run-breaks-at-every-operator 1`] = `const all =
+  alphaCondition ||
   betaCondition ||
   gammaCondition;
 `;
 
-exports[`operators > fallback-with-no-signal-is-break-after 1`] = `const all = alphaCondition ||
+exports[`operators > fallback-with-no-signal-is-break-after 1`] = `const all =
+  alphaCondition ||
   betaCondition ||
   gammaCondition;
 `;
 
-exports[`operators > operator-chain-is-preferred-over-an-inner-call-group-outermo 1`] = `const ok = validate(inputData) &&
+exports[`operators > operator-chain-is-preferred-over-an-inner-call-group-outermo 1`] = `const ok =
+  validate(inputData) &&
   sanitize(inputData, options);
 `;
 
-exports[`operators > parenthesized-operand-stops-the-chain 1`] = `const v = (alphaCondition || betaCondition) &&
+exports[`operators > parenthesized-operand-stops-the-chain 1`] = `const v =
+  (alphaCondition || betaCondition) &&
   (gammaCondition || deltaCondition);
 `;
 
@@ -1139,8 +1146,8 @@ exports[`types > a-break-after-a-non-null-assertion-is-allowed 1`] = `function f
   for (let i = findLine(start); i <= findLine(end); i++) visited.add(
     vlines[i]!
   );
-  const y = !aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ||
-    !bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb;
+  const y =
+    !aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa || !bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb;
 }
 `;
 
@@ -1246,12 +1253,14 @@ function f<T>(x: T): T {
 }
 `;
 
-exports[`types > unions-and-intersections-break-at-the-operator 1`] = `type Handler = FirstHandlerType
+exports[`types > unions-and-intersections-break-at-the-operator 1`] = `type Handler =
+  FirstHandlerType
   | SecondHandlerType
   | ThirdHandlerKind;
 `;
 
-exports[`types > unions-and-intersections-break-at-the-operator-2 1`] = `type Both = FirstMixinType
+exports[`types > unions-and-intersections-break-at-the-operator-2 1`] = `type Both =
+  FirstMixinType
   & SecondMixinType
   & ThirdMixinTypeHere;
 `;
