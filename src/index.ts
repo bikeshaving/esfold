@@ -2599,8 +2599,10 @@ function format(
       const item = group.items[0];
       if (!item || !item.range) return false;
       // A single item in a type is never worth its own line, whatever it
-      // holds: `Component<{root?: object}>` reads as one name.
-      if (group.node.type.startsWith('TS')) return true;
+      // holds: `Component<{root?: object}>` reads as one name. Unless that
+      // item is an operand list, where the alternative is breaking the list
+      // at a bar and stranding its tail past a bracket that was available.
+      if (group.node.type.startsWith('TS')) return !isOperandList(item);
       // A lone parameter is worth its own line unless the return type is a
       // body that hugs. `f(x: string): {` puts the object where it reads;
       // `f(x: string): A |` strands the rest of the union on the next line.
