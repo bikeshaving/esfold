@@ -884,6 +884,25 @@ const identity = [
 ];
 `;
 
+exports[`join > an-ignored-class-still-formats-its-body 1`] = `// esfold-ignore
+class Grid {
+  cells = [[1, 2], [3, 4]];
+}
+`;
+
+exports[`join > an-ignored-function-keeps-its-signature-and-formats-its-body 1`] = `// esfold-ignore
+function kept(
+  first: number,
+  second: number,
+) {
+  run([[1, 2], [3, 4]]);
+}
+
+function control(first: number, second: number) {
+  run([[1, 2], [3, 4]]);
+}
+`;
+
 exports[`join > an-ignored-if-keeps-its-condition 1`] = `function check(x: number, y: number) {
   // esfold-ignore
   if (
@@ -896,6 +915,17 @@ exports[`join > an-ignored-if-keeps-its-condition 1`] = `function check(x: numbe
     return false;
   }
   return false;
+}
+`;
+
+exports[`join > an-ignored-if-keeps-its-condition-and-formats-its-body 1`] = `function check(x: number, y: number) {
+  // esfold-ignore
+  if (
+    x > 0 &&
+    y > 0
+  ) {
+    run([[1, 2], [3, 4]]);
+  }
 }
 `;
 

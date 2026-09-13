@@ -162,14 +162,31 @@ function looksLikeOperandEnd(token: Token | null): boolean {
   return false;
 }
 
-// `// esfold-ignore` leaves the construct after it as written, nested groups
-// and all. `// prettier-ignore` does the same, so layouts a file protected
+// `// esfold-ignore` leaves the construct after it as written, down to its
+// first block: above `if (` the condition is kept and the body is still
+// formatted. `// prettier-ignore` does the same, so layouts a file protected
 // under Prettier stay protected. The esfold comment may carry a reason.
 const ESFOLD_IGNORE = /^\s*esfold-ignore\b/;
 const PRETTIER_IGNORE = /^\s*prettier-ignore\s*$/;
 
-function ignoredRanges(sourceCode: Source): Range[] {
-  const ranges: Range[] = [];
+// Bodies an ignore comment stops at. What they hold is formatted as usual, so a
+// comment meant for a signature cannot freeze the function under it.
+const IGNORE_STOPS = new Set([
+  'BlockStatement',
+  'StaticBlock',
+  'ClassBody',
+  'TSInterfaceBody',
+  'TSModuleBlock',
+  'SwitchCase',
+]);
+
+interface Ignored {
+  range: Range;
+  holes: Range[];
+}
+
+function ignoredRanges(sourceCode: Source): Ignored[] {
+  const ranges: Ignored[] = [];
   for (const comment of sourceCode.getAllComments()) {
     if (
       !ESFOLD_IGNORE.test(comment.value) &&
@@ -179,10 +196,33 @@ function ignoredRanges(sourceCode: Source): Range[] {
     }
 
     const node = ignoredNode(sourceCode, comment);
-    if (node) ranges.push(node.range);
+    if (node) ranges.push({ range: node.range, holes: stopsWithin(node) });
   }
 
   return ranges;
+}
+
+function stopsWithin(root: Node): Range[] {
+  const holes: Range[] = [];
+  const visit = (value: unknown) => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+
+    if (!value || typeof value !== 'object' || !('type' in value)) return;
+    const node = value as Node;
+    if (node !== root && IGNORE_STOPS.has(node.type)) {
+      holes.push(node.range);
+      return;
+    }
+
+    for (const [key, child] of Object.entries(node)) {
+      if (key !== 'parent') visit(child);
+    }
+  };
+  visit(root);
+  return holes;
 }
 
 // The whole node that starts at the next token, the way Prettier reads its
@@ -1975,11 +2015,18 @@ function format(
   const { unit, operatorSide, newline } = inferred;
 
   const collected = collectGroups(sourceCode, operatorSide, tabWidth);
-  // A group inside an ignored construct is never broken, joined or completed.
+  // A group inside an ignored construct, and outside the bodies it stops at,
+  // is never broken, joined or completed.
   const ignored = ignoredRanges(sourceCode);
+  const within = ([from, to]: Range, [start, end]: Range) =>
+    start <= from && to <= end;
   const isIgnored = (group: Group) => {
-    const [from, to] = group.range ?? group.node.range;
-    return ignored.some(([start, end]) => start <= from && to <= end);
+    const range = group.range ?? group.node.range;
+    return ignored.some(
+      (item) =>
+        within(range, item.range) &&
+        !item.holes.some((hole) => within(range, hole)),
+    );
   };
   const candidates = collected.candidates.filter((group) => !isIgnored(group));
   const necessary = collected.necessary.filter((group) => !isIgnored(group));
@@ -2938,7 +2985,12 @@ function format(
     if (content < start) continue;
     // A line inside an ignored construct keeps the indentation it was written
     // with, even when the construct itself moves.
-    if (ignored.some(([from, to]) => from < content && content < to)) continue;
+    const inside = ([from, to]: Range) => from < content && content < to;
+    if (
+      ignored.some((item) => inside(item.range) && !item.holes.some(inside))
+    ) {
+      continue;
+    }
     // A blank line stays blank.
     if (
       content >= text.length || text[content] === '\n' || text[content] === '\r'

@@ -117,8 +117,10 @@ be combined with it. Pair `join` with `@stylistic/comma-dangle` if trailing
 commas should come back when a joined list breaks again.
 
 To leave something as written, put `// esfold-ignore` on its own line above
-it. esfold then leaves the whole statement, property or `if` that follows
-alone, including everything nested inside it. A reason can follow the comment:
+it. esfold then leaves the statement, property or `if` that follows alone,
+down to its first block: above `if (` the condition is kept and the body is
+still formatted, and above a function the signature is kept. An array or
+object is kept whole. A reason can follow the comment:
 `// esfold-ignore: the rows are a grid`. Between JSX children, write
 `{/* esfold-ignore */}` above the child. `// prettier-ignore` works the same
 way, so layouts protected under Prettier stay protected.
