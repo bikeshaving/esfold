@@ -120,6 +120,8 @@ To leave one group as written, put `// eslint-disable-next-line esfold/breaks`
 on the line above where it opens. That covers every break the group owns and
 the lines inside it. A group that opens on a later line needs its own comment,
 or use a `/* eslint-disable esfold/breaks */` block around the whole thing.
+That includes the condition of an `if`: a comment above `if (` keeps the
+parentheses, but not a condition that starts on the next line.
 
 ## Requirements
 
