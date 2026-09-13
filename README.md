@@ -116,12 +116,16 @@ break, like a block or an interface body. Rules that force breaks, such as
 be combined with it. Pair `join` with `@stylistic/comma-dangle` if trailing
 commas should come back when a joined list breaks again.
 
-To leave one group as written, put `// eslint-disable-next-line esfold/breaks`
-on the line above where it opens. That covers every break the group owns and
-the lines inside it. A group that opens on a later line needs its own comment,
-or use a `/* eslint-disable esfold/breaks */` block around the whole thing.
-That includes the condition of an `if`: a comment above `if (` keeps the
-parentheses, but not a condition that starts on the next line.
+To leave something as written, put `// esfold-ignore` on its own line above
+it. esfold then leaves the whole statement, property or `if` that follows
+alone, including everything nested inside it. A reason can follow the comment:
+`// esfold-ignore: the rows are a grid`. Between JSX children, write
+`{/* esfold-ignore */}` above the child. `// prettier-ignore` works the same
+way, so layouts protected under Prettier stay protected.
+
+`// eslint-disable-next-line esfold/breaks` works too, but only for groups
+that open on the next line. A group that opens later, such as the condition
+inside `if (`, needs its own comment.
 
 ## Requirements
 

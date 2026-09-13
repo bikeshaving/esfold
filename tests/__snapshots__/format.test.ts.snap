@@ -642,6 +642,16 @@ exports[`hugging > two-huggable-arguments-disables-hugging-the-call-breaks-norm 
 );
 `;
 
+exports[`ignore > an-esfold-ignore-comment-keeps-an-over-width-line 1`] = `// esfold-ignore
+const list = [alphaValue, betaValue, gammaValue, deltaValue];
+const other = [
+  alphaValue,
+  betaValue,
+  gammaValue,
+  deltaValue
+];
+`;
+
 exports[`join > a-broken-call-with-a-broken-trailing-arrow-is-joined 1`] = `foo(a, (x) => bar(x));
 `;
 
@@ -763,6 +773,20 @@ exports[`join > a-lone-parameter-yields-to-the-return-type-literal 1`] = `export
 }
 `;
 
+exports[`join > a-prettier-ignore-comment-is-honored-the-same-way 1`] = `const shapes = {
+  // prettier-ignore
+  I: [
+    [0, 0, 0, 0],
+    [1, 1, 1, 1],
+  ],
+  O: [[1, 1], [1, 1]],
+};
+`;
+
+exports[`join > a-prettier-ignore-comment-with-more-text-is-not-honored 1`] = `// prettier-ignore because the rows are a grid
+const shapes = [[0, 0], [1, 1]];
+`;
+
 exports[`join > a-restored-hug-brings-the-body-back-a-level 1`] = `hash({ password: "foobar" }, function (err, pass, salt, hash) {
   if (err) throw err;
   users.tj.salt = salt;
@@ -803,6 +827,10 @@ exports[`join > a-ternary-with-a-multi-line-test-keeps-its-branches-broken 1`] =
 }
 `;
 
+exports[`join > a-trailing-ignore-comment-does-not-ignore-the-next-line 1`] = `const a = 1; // esfold-ignore
+const shapes = [[0, 0], [1, 1]];
+`;
+
 exports[`join > a-type-literal-that-fits-is-joined 1`] = `type X = { a: string; b: number };
 `;
 
@@ -822,6 +850,63 @@ exports[`join > an-array-of-objects-that-fits-is-joined 1`] = `const rows = [{ i
 `;
 
 exports[`join > an-array-of-single-element-arrays-is-joined 1`] = `const flat = [[1], [2]];
+`;
+
+exports[`join > an-esfold-ignore-comment-keeps-the-next-statement-as-written 1`] = `// esfold-ignore
+export const shapes = [
+  [0, 0, 0],
+  [1, 1, 1],
+];
+
+export const plain = [[0, 0, 0], [1, 1, 1]];
+`;
+
+exports[`join > an-ignore-comment-between-jsx-children-keeps-the-next-child 1`] = `const view = (
+  <div>
+    {/* esfold-ignore */}
+    <span
+      id="a"
+      class="b"
+    >
+      text
+    </span>
+    <span id="c" class="d">
+      text
+    </span>
+  </div>
+);
+`;
+
+exports[`join > an-ignore-comment-can-carry-a-reason 1`] = `// esfold-ignore: the rows are a grid
+const identity = [
+  [1, 0],
+  [0, 1],
+];
+`;
+
+exports[`join > an-ignored-if-keeps-its-condition 1`] = `function check(x: number, y: number) {
+  // esfold-ignore
+  if (
+    x > 0 &&
+    y > 0
+  ) {
+    return true;
+  }
+  if (x < 0 && y < 0) {
+    return false;
+  }
+  return false;
+}
+`;
+
+exports[`join > an-ignored-statement-keeps-its-nested-groups 1`] = `// esfold-ignore
+const settings = {
+  outer: 1,
+  inner: [
+    [0, 0],
+    [1, 1],
+  ],
+};
 `;
 
 exports[`join > an-inline-block-comment-does-not-pin-a-group 1`] = `D.equals = function (/** @type {number[]} */ l) {

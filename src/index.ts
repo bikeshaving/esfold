@@ -162,6 +162,74 @@ function looksLikeOperandEnd(token: Token | null): boolean {
   return false;
 }
 
+// `// esfold-ignore` leaves the construct after it as written, nested groups
+// and all. `// prettier-ignore` does the same, so layouts a file protected
+// under Prettier stay protected. The esfold comment may carry a reason.
+const ESFOLD_IGNORE = /^\s*esfold-ignore\b/;
+const PRETTIER_IGNORE = /^\s*prettier-ignore\s*$/;
+
+function ignoredRanges(sourceCode: Source): Range[] {
+  const ranges: Range[] = [];
+  for (const comment of sourceCode.getAllComments()) {
+    if (
+      !ESFOLD_IGNORE.test(comment.value) &&
+      !PRETTIER_IGNORE.test(comment.value)
+    ) {
+      continue;
+    }
+
+    const node = ignoredNode(sourceCode, comment);
+    if (node) ranges.push(node.range);
+  }
+
+  return ranges;
+}
+
+// The whole node that starts at the next token, the way Prettier reads its
+// comment: the statement, the property, the `if` with its condition. Between
+// JSX children, `{/* esfold-ignore */}` covers the next child instead.
+function ignoredNode(
+  sourceCode: Source,
+  comment: TSESTree.Comment,
+): Node | undefined {
+  const at = comment.range[0];
+  const container = sourceCode.getNodeByRangeIndex(at);
+  if (container?.type === 'JSXEmptyExpression') {
+    const holder = container.parent;
+    const parent = holder?.parent;
+    if (
+      !holder ||
+      !parent ||
+      (parent.type !== 'JSXElement' && parent.type !== 'JSXFragment')
+    ) {
+      return undefined;
+    }
+
+    const siblings: Node[] = parent.children;
+    return siblings
+      .slice(siblings.indexOf(holder) + 1)
+      .find((child) => child.type !== 'JSXText' || child.value.trim() !== '');
+  }
+
+  // A trailing comment belongs to the line it ends, not the one after.
+  const text = sourceCode.text;
+  const lineStart = text.lastIndexOf('\n', at - 1) + 1;
+  if (text.slice(lineStart, at).trim() !== '') return undefined;
+
+  const next = sourceCode.getTokenAfter(comment, { includeComments: false });
+  if (!next) return undefined;
+  let node = sourceCode.getNodeByRangeIndex(next.range[0]);
+  while (
+    node?.parent &&
+    node.parent.type !== 'Program' &&
+    node.parent.range[0] === next.range[0]
+  ) {
+    node = node.parent;
+  }
+
+  return node && node.type !== 'Program' ? node : undefined;
+}
+
 function isForbiddenBreak(sourceCode: Source, gap: Gap): boolean {
   const boundary =
     sourceCode.getTokenByRangeStart(gap.end, { includeComments: true });
@@ -1906,11 +1974,16 @@ function format(
   }
   const { unit, operatorSide, newline } = inferred;
 
-  const { candidates, necessary, statementStarts } = collectGroups(
-    sourceCode,
-    operatorSide,
-    tabWidth,
-  );
+  const collected = collectGroups(sourceCode, operatorSide, tabWidth);
+  // A group inside an ignored construct is never broken, joined or completed.
+  const ignored = ignoredRanges(sourceCode);
+  const isIgnored = (group: Group) => {
+    const [from, to] = group.range ?? group.node.range;
+    return ignored.some(([start, end]) => start <= from && to <= end);
+  };
+  const candidates = collected.candidates.filter((group) => !isIgnored(group));
+  const necessary = collected.necessary.filter((group) => !isIgnored(group));
+  const { statementStarts } = collected;
   // The layout being decided, as lines of source pieces. Every decision
   // reshapes the projection; the edits are read off it at the end as the
   // difference from the source.
@@ -2863,6 +2936,9 @@ function format(
     const ws = /^[ \t]*/.exec(text.slice(lineStart, lineStart + 400))![0];
     const content = lineStart + ws.length;
     if (content < start) continue;
+    // A line inside an ignored construct keeps the indentation it was written
+    // with, even when the construct itself moves.
+    if (ignored.some(([from, to]) => from < content && content < to)) continue;
     // A blank line stays blank.
     if (
       content >= text.length || text[content] === '\n' || text[content] === '\r'
