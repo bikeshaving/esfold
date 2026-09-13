@@ -43,6 +43,31 @@ test('reports and fixes through the rule API', () => {
   });
 });
 
+// A disable comment above the line where a group opens covers every break
+// the group owns. Joining these rows reports on each row's line, so only the
+// first was covered, the rest still joined, and the comment was then removed
+// as unused.
+test('eslint-disable-next-line covers a whole group', () => {
+  ruleTester.run('breaks', breaks, {
+    valid: [
+      {
+        code: '// eslint-disable-next-line rule-to-test/breaks\n' +
+          'const shapes = [\n' +
+          '  [0, 0, 0],\n' +
+          '  [1, 1, 1],\n' +
+          '];',
+        options: [{ join: true }],
+      },
+      {
+        code: '// eslint-disable-next-line rule-to-test/breaks\n' +
+          'const r = computeThing(firstArgument, secondArgument);',
+        options: [{ maxWidth: 40 }],
+      },
+    ],
+    invalid: [],
+  });
+});
+
 // Whatever syntax ESLint hands the rule, the rule handles: it declares no
 // parser of its own.
 test('runs under a TypeScript + JSX parser', () => {

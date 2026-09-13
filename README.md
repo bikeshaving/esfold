@@ -116,6 +116,11 @@ break, like a block or an interface body. Rules that force breaks, such as
 be combined with it. Pair `join` with `@stylistic/comma-dangle` if trailing
 commas should come back when a joined list breaks again.
 
+To leave one group as written, put `// eslint-disable-next-line esfold/breaks`
+on the line above where it opens. That covers every break the group owns and
+the lines inside it. A group that opens on a later line needs its own comment,
+or use a `/* eslint-disable esfold/breaks */` block around the whole thing.
+
 ## Requirements
 
 ESLint 9 or later.

@@ -1969,6 +1969,8 @@ function format(
     gap: Gap;
     messageId: MessageId;
     line?: VLine;
+    // Where the group that decided this opens. See `reportFrom`.
+    start: number;
   }
   const decisions = new Map<string, Decision>();
   const decisionFor = (gap: Gap) =>
@@ -2201,7 +2203,7 @@ function format(
             ? breakAt(gap, closeAnchors, '')
             : breakAt(gap, anchors, itemExtra);
       if (!line) continue;
-      record({ broken: true, gap, messageId, line });
+      record({ broken: true, gap, messageId, line, start: groupStart });
     }
   }
 
@@ -2322,11 +2324,13 @@ function format(
   // Leading operators removed with a join. Not gaps: nothing puts them back.
   const leadJoins: {
     range: { start: number; end: number };
-    messageId: MessageId
+    messageId: MessageId;
+    start: number;
   }[] = [];
 
   /** Remove every break a group owns from the projection. */
   function joinGroup(group: Group, messageId: MessageId) {
+    const groupStart = (group.range ?? group.node.range)[0];
     const gaps = ownGaps(group).filter((gap) => !isDecided(gap));
     let joinedAny = false;
     for (const gap of gaps) {
@@ -2337,10 +2341,10 @@ function format(
       if (!joinAt(gap, gap.join ?? '')) continue;
       claim(gap);
       joinedAny = true;
-      record({ broken: false, gap, messageId });
+      record({ broken: false, gap, messageId, start: groupStart });
     }
     if (joinedAny && group.lead && joinCut(group.lead, ' ')) {
-      leadJoins.push({ range: group.lead, messageId });
+      leadJoins.push({ range: group.lead, messageId, start: groupStart });
     }
   }
 
@@ -2792,6 +2796,15 @@ function format(
     }
   }
 
+  // A report starts on the line where its group opens, when that is an
+  // earlier line, so `eslint-disable-next-line` above the opening line covers
+  // every break the group owns. A report on the opening line stays put.
+  const reportFrom = (groupStart: number, at: number) => {
+    const here = sourceCode.getLocFromIndex(at);
+    const open = sourceCode.getLocFromIndex(Math.min(groupStart, at));
+    return { start: open.line < here.line ? open : here, end: here };
+  };
+
   // The edits are where the projection differs from the source.
   const edits: Edit[] = [];
   const joins: Edit[] = [];
@@ -2803,31 +2816,28 @@ function format(
     emitted.add(key);
     if (broken === textHasBreak(gap)) continue;
     if (broken) {
-      const loc = sourceCode.getLocFromIndex(gap.end);
       edits.push({
         range: [gap.start, gap.end],
         text: newline + (decision.line ? leading(decision.line) : ''),
-        loc: { start: loc, end: loc },
+        loc: reportFrom(decision.start, gap.end),
         messageId,
         data: { maxWidth: String(maxWidth) },
       });
     } else {
       const range = joinRange(gap);
-      const loc = sourceCode.getLocFromIndex(range.end);
       joins.push({
         range: [range.start, range.end],
         text: gap.join ?? '',
-        loc: { start: loc, end: loc },
+        loc: reportFrom(decision.start, range.end),
         messageId,
       });
     }
   }
-  for (const { range, messageId } of leadJoins) {
-    const loc = sourceCode.getLocFromIndex(range.end);
+  for (const { range, messageId, start } of leadJoins) {
     joins.push({
       range: [range.start, range.end],
       text: ' ',
-      loc: { start: loc, end: loc },
+      loc: reportFrom(start, range.end),
       messageId,
     });
   }
@@ -2870,11 +2880,12 @@ function format(
         node.type === 'JSXText')
     )
       continue;
-    const loc = sourceCode.getLocFromIndex(content);
+    // Reported from the line this one hangs from, so a disable comment that
+    // keeps a group's breaks also keeps the lines they would have moved.
     edits.push({
       range: [lineStart, content],
       text: want,
-      loc: { start: loc, end: loc },
+      loc: reportFrom(vl.anchor, content),
       messageId: 'moved',
     });
   }
