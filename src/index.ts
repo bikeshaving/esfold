@@ -99,11 +99,26 @@ function measureLine(text: string, tabWidth: number): number {
   return codePoints + extra;
 }
 
-function inferIndentUnit(lines: string[]): string {
+function inferIndentUnit(sourceCode: Source): string {
+  // A block comment's ` * ` lines and a template's lines are text, not
+  // nesting: counted, a file of doc comments reads as indented by one space.
+  const text = new Set<number>();
+  const spans = [
+    ...sourceCode.getAllComments().filter((c) => c.type === 'Block'),
+    ...sourceCode.ast.tokens.filter((t) => t.type === 'Template'),
+  ];
+  for (const span of spans) {
+    for (let line = span.loc.start.line + 1; line <= span.loc.end.line; line++) {
+      text.add(line);
+    }
+  }
+
   const counts = new Map();
   let prev = null;
-  for (const line of lines) {
-    if (line.trim() === '') continue;
+  const lines = sourceCode.lines;
+  for (let index = 0; index < lines.length; index++) {
+    const line = lines[index]!;
+    if (text.has(index + 1) || line.trim() === '') continue;
     const ws = /^[ \t]*/.exec(line)![0];
     if (prev !== null && ws.length > prev.length && ws.startsWith(prev)) {
       const delta = ws.slice(prev.length);
@@ -2012,7 +2027,7 @@ function format(
   let inferred = indentCache.get(sourceCode);
   if (inferred === undefined) {
     inferred = {
-      unit: inferIndentUnit(sourceCode.lines),
+      unit: inferIndentUnit(sourceCode),
       operatorSide: inferOperatorSide(sourceCode),
       newline: inferNewline(sourceCode.text),
     };

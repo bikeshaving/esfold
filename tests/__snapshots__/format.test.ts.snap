@@ -688,6 +688,15 @@ exports[`join > a-chain-with-block-bodies-keeps-its-layout 1`] = `promise
 exports[`join > a-destructuring-pattern-that-fits-is-joined 1`] = `const { a, b } = obj;
 `;
 
+exports[`join > a-doc-comment-does-not-set-the-indent-unit 1`] = `/**
+ * Throws when the value is missing.
+ */
+
+throw new Error(
+	"aaaaaaaaaa aaaaaaaaaa aaaaaaaaaa aaaaaaaaaa aaaaaaaaaa aaaaaaaaaa aaaaaaaaaa aaaaaaaaaa aaaaaaaaaa",
+);
+`;
+
 exports[`join > a-for-head-broken-after-its-paren-keeps-its-clauses-level 1`] = `for (
 	let ancestor = element.parentElement;
 	ancestor;
