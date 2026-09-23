@@ -313,10 +313,12 @@ function isForbiddenBreak(sourceCode: Source, gap: Gap): boolean {
     const before = sourceCode.getTokenBefore(prev);
     if (prev.value !== '!' || !looksLikeOperandEnd(before)) return true;
   }
+  const voidType = prev.value === 'void' &&
+    sourceCode.getNodeByRangeIndex(prev.range[0])?.type === 'TSVoidKeyword';
   if (
     prev.type === 'Keyword' &&
     (prev.value === 'typeof' ||
-      prev.value === 'void' ||
+      (prev.value === 'void' && !voidType) ||
       prev.value === 'delete' ||
       prev.value === 'await')
   )

@@ -659,6 +659,14 @@ exports[`join > a-broken-heritage-clause-joins-down-to-the-extends-break 1`] = `
 	extends Pick<globalThis.HTMLFontElement, "color" | "face" | "size"> {}
 `;
 
+exports[`join > a-broken-union-breaks-after-a-void-member 1`] = `export type Middleware = (request: Request, context: RouteContext) =>
+	Response |
+	null |
+	undefined |
+	void |
+	Promise<Response | null | undefined | void>;
+`;
+
 exports[`join > a-call-around-a-multi-line-element-breaks-its-arguments 1`] = `renderer.render(
   <div>
     <span>1</span>
@@ -1308,6 +1316,14 @@ exports[`types > a-type-literal-breaks-like-an-object-literal 1`] = `type Option
   retries: number;
   cacheEnabled: boolean
 };
+`;
+
+exports[`types > a-union-breaks-after-a-void-member 1`] = `export type Result =
+  Response
+  | null
+  | undefined
+  | void
+  | Promise<Response | null | undefined | void>;
 `;
 
 exports[`types > an-exported-declaration-breaks-after-its-equals-before-a-lone-argument 1`] = `export const Portal =
