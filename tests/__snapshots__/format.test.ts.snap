@@ -781,6 +781,11 @@ exports[`join > a-lone-parameter-yields-to-the-return-type-literal 1`] = `export
 }
 `;
 
+exports[`join > a-lone-specifier-broken-inside-its-braces-is-joined 1`] = `import type { HTTPError} from "@b9g/http-errors";
+import { NotFound } from "@b9g/http-errors";
+export { InternalServerError} from "@b9g/http-errors";
+`;
+
 exports[`join > a-prettier-ignore-comment-is-honored-the-same-way 1`] = `const shapes = {
   // prettier-ignore
   I: [

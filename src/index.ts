@@ -1020,9 +1020,7 @@ function specifierGroup(
   kinds: string[],
 ): Group | null {
   const named = (node.specifiers ?? []).filter((s) => kinds.includes(s.type));
-  // A lone specifier stays inline however long: the module path is what makes
-  // the line long, and no break inside the braces shortens it.
-  if (named.length < 2) return null;
+  if (named.length === 0) return null;
   const open = sourceCode.getTokenBefore(sourceCode.getFirstToken(named[0]!)!, {
     filter: (t) => isPunct(t, '{'),
   });
@@ -1031,8 +1029,14 @@ function specifierGroup(
   });
   if (!open || !close) return null;
   const gaps = listGaps(sourceCode, open, close, named);
-  return gaps &&
-    { node, gaps, range: [open.range[0], close.range[1]], items: named };
+  if (!gaps) return null;
+  // A lone specifier stays inline however long: the module path is what makes
+  // the line long, and no break inside the braces shortens it.
+  if (named.length === 1) {
+    for (const gap of gaps) gap.joinOnly = true;
+  }
+
+  return { node, gaps, range: [open.range[0], close.range[1]], items: named };
 }
 
 function ternaryGroup(
