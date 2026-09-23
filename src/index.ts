@@ -2226,8 +2226,6 @@ function format(
     if (index === -1) return null;
     const vl = vlines[index]!;
     const wasBroken = textHasBreak(gap);
-    const keepsIndent = wasBroken && !rebase;
-    const anchor = keepsIndent ? anchors.kept : anchors.fresh;
     const cut = wasBroken ? joinRange(gap) : gap;
     const { before, after } = splitPieces(vl.pieces, cut.start, cut.end);
     // A dangling separator dropped by a join comes back with the break.
@@ -2237,13 +2235,23 @@ function format(
     if (before.length === 0 || after.length === 0) return null;
     // A break the source already had keeps the indentation the source gave
     // its line, relative to the anchor; a new break indents by the group's
-    // rule. With `join`, a break inside brackets is new: an item sits one
-    // level inside its bracket's line whatever the source gave it. A
-    // bracketless group keeps the source's indent, which carries nesting its
-    // own rule cannot see. Either way the line follows the anchor from here on.
-    const line: VLine = keepsIndent
-      ? { pieces: after, own: sourceLeadingAt(cut.end), anchor }
-      : { pieces: after, own: '', anchor, extra, fresh: true };
+    // rule. With `join`, a kept break inside brackets moves in to the group's
+    // rule when the source indented it deeper, and never out: a bracket that
+    // opens on a continuation line is anchored further back by
+    // @stylistic/indent. A bracketless group keeps the source's indent, which
+    // carries nesting its own rule cannot see. Either way the line follows the
+    // anchor from here on.
+    const kept: VLine =
+      { pieces: after, own: sourceLeadingAt(cut.end), anchor: anchors.kept };
+    const fresh: VLine =
+      { pieces: after, own: '', anchor: anchors.fresh, extra, fresh: true };
+    const line = !wasBroken
+      ? fresh
+      : rebase &&
+          measureLine(leading(fresh), tabWidth) <
+            measureLine(leading(kept), tabWidth)
+        ? fresh
+        : kept;
     vl.pieces = before;
     vlines.splice(index + 1, 0, line);
     return line;

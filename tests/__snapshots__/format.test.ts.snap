@@ -766,6 +766,15 @@ exports[`join > a-hug-whose-head-does-not-fit-breaks-every-argument 1`] = `funct
 exports[`join > a-hugged-arrow-joins-with-the-call-close-paren 1`] = `items.map((item) => compute(item));
 `;
 
+exports[`join > a-kept-break-inside-brackets-never-moves-out 1`] = `function f() {
+	const columnEntries = Object.entries(fieldsMeta)
+		.filter(([, field]) => field && "schema" in field) as Array<[
+		string,
+		FieldMeta,
+	]>;
+}
+`;
+
 exports[`join > a-kept-break-takes-the-indent-join-would-give-it 1`] = `export type GeneratorMiddleware = (request: Request, context: RouteContext) =>
 	Generator<Request | undefined, Response | null | undefined | void, Response> |
 	AsyncGenerator<
