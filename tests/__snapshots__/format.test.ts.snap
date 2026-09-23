@@ -797,6 +797,14 @@ exports[`join > a-kept-break-takes-the-indent-of-its-new-place 1`] = `const valu
 );
 `;
 
+exports[`join > a-line-inside-an-item-moves-with-it 1`] = `const values = production
+  ? { mode: 'production' }
+  : {
+    'import.meta.env?.MODE':
+      '(import.meta.env ? import.meta.env.MODE : undefined)',
+  };
+`;
+
 exports[`join > a-lone-assignment-inside-a-broken-chain-does-not-join 1`] = `describe('redirect', function () {
   before(function () {
     this.app.use(function (req, res, next) {

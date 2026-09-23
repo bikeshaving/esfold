@@ -1923,6 +1923,10 @@ interface VLine {
   // this line moves the same way. A line a break made instead indents from
   // the anchor's line by `extra`.
   anchor?: number;
+  // The start of the bracketed item holding this line, when that item starts
+  // a line of its own. Once the item's first line moves in, this line follows
+  // it rather than the anchor.
+  item?: number;
   extra?: string;
   fresh?: boolean;
 }
@@ -2157,15 +2161,18 @@ function format(
 
   /** The leading whitespace a line will carry once edits apply. */
   function leading(vl: VLine, depth = 0): string {
-    if (vl.anchor === undefined || depth > 64) return vl.own;
-    const index = findLine(vl.anchor);
+    const anchor = vl.item !== undefined && rebased.has(vl.item)
+      ? vl.item
+      : vl.anchor;
+    if (anchor === undefined || depth > 64) return vl.own;
+    const index = findLine(anchor);
     const anchorLine = index === -1 ? undefined : vlines[index];
     if (!anchorLine || anchorLine === vl) return vl.own;
     const anchorLeading = leading(anchorLine, depth + 1);
     if (vl.fresh) return anchorLeading + (vl.extra ?? '');
     // The source indented this line so far beyond (or short of) the anchor's
     // line; keep that difference from wherever the anchor's line is now.
-    const anchorSrc = sourceLeadingAt(vl.anchor);
+    const anchorSrc = sourceLeadingAt(anchor);
     if (vl.own.startsWith(anchorSrc)) {
       return anchorLeading + vl.own.slice(anchorSrc.length);
     }
@@ -2216,6 +2223,9 @@ function format(
    * plus `extra`. The line being split keeps its identity, so decisions that
    * point at it stay current.
    */
+  // Items whose first line a kept break moved in; see `VLine.item`.
+  const rebased = new Set<number>();
+
   function breakAt(
     gap: Gap,
     anchors: { fresh: number; kept: number },
@@ -2252,6 +2262,7 @@ function format(
             measureLine(leading(kept), tabWidth)
         ? fresh
         : kept;
+    if (wasBroken && line === fresh) rebased.add(vlStart(line));
     vl.pieces = before;
     vlines.splice(index + 1, 0, line);
     return line;
@@ -2375,7 +2386,15 @@ function format(
         // from that operand, so a branch that moves takes its lines along. A
         // line that starts an operand hangs from the statement like the rest.
         const operands: [number, number][] = [];
-        if (bracketless) {
+        const items: [number, number][] = [];
+        if (!bracketless) {
+          for (const item of group.items ?? []) {
+            if (!item) continue;
+            const lineStart = text.lastIndexOf('\n', item.range[0] - 1) + 1;
+            if (text.slice(lineStart, item.range[0]).trim() !== '') continue;
+            items.push(item.range as [number, number]);
+          }
+        } else {
           const gaps = [...group.gaps].sort((a, b) => a.start - b.start);
           let from = start;
           for (const gap of gaps) {
@@ -2387,7 +2406,7 @@ function format(
           }
           operands.push([from, end]);
         }
-        return { start, end, anchor: anchorOf(group, start), operands };
+        return { start, end, anchor: anchorOf(group, start), operands, items };
       })
       .sort((a, b) => a.start - b.start || b.end - a.end);
     const open: {
@@ -2395,6 +2414,7 @@ function format(
       end: number;
       anchor: number;
       operands: [number, number][];
+      items: [number, number][];
     }[] = [];
     let next = 0;
     for (const vl of vlines) {
@@ -2411,6 +2431,9 @@ function format(
         }
         if (anchor < at) {
           vl.anchor = anchor;
+          for (const [from, to] of open[i]!.items) {
+            if (from < at && at < to) vl.item = from;
+          }
           break;
         }
       }
