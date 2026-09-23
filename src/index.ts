@@ -2205,12 +2205,14 @@ function format(
     gap: Gap,
     anchors: { fresh: number; kept: number },
     extra: string,
+    rebase: boolean,
   ): VLine | null {
     const index = lineOf(gap);
     if (index === -1) return null;
     const vl = vlines[index]!;
     const wasBroken = textHasBreak(gap);
-    const anchor = wasBroken ? anchors.kept : anchors.fresh;
+    const keepsIndent = wasBroken && !rebase;
+    const anchor = keepsIndent ? anchors.kept : anchors.fresh;
     const cut = wasBroken ? joinRange(gap) : gap;
     const { before, after } = splitPieces(vl.pieces, cut.start, cut.end);
     // A dangling separator dropped by a join comes back with the break.
@@ -2220,8 +2222,11 @@ function format(
     if (before.length === 0 || after.length === 0) return null;
     // A break the source already had keeps the indentation the source gave
     // its line, relative to the anchor; a new break indents by the group's
-    // rule. Either way the line follows the anchor from here on.
-    const line: VLine = wasBroken
+    // rule. With `join`, a break inside brackets is new: an item sits one
+    // level inside its bracket's line whatever the source gave it. A
+    // bracketless group keeps the source's indent, which carries nesting its
+    // own rule cannot see. Either way the line follows the anchor from here on.
+    const line: VLine = keepsIndent
       ? { pieces: after, own: sourceLeadingAt(cut.end), anchor }
       : { pieces: after, own: '', anchor, extra, fresh: true };
     vl.pieces = before;
@@ -2305,8 +2310,10 @@ function format(
     // No staircase: a bracket-less group starting a continuation line takes
     // that indent as its level, or its first operand ends up a level shallower.
     const align = group.flat === true ||
-      (bracketless && startsLine && !statementStarts.has(groupStart));
+      (bracketless && startsLine && !statementStarts.has(groupStart)) ||
+      (group.node.type === 'ForStatement' && startsLine);
     const itemExtra = align ? '' : unit;
+    const rebase = join && !bracketless;
     const anchors = {
       fresh: anchorOf(group, groupStart, true),
       kept: anchorOf(group, groupStart),
@@ -2324,10 +2331,10 @@ function format(
       if (index === -1) continue;
       const vl = vlines[index]!;
       const line = gap.kind === 'same'
-          ? breakAt(gap, { fresh: vlStart(vl), kept: vlStart(vl) }, '')
+          ? breakAt(gap, { fresh: vlStart(vl), kept: vlStart(vl) }, '', rebase)
           : gap.kind === 'close'
-            ? breakAt(gap, closeAnchors, '')
-            : breakAt(gap, anchors, itemExtra);
+            ? breakAt(gap, closeAnchors, '', rebase)
+            : breakAt(gap, anchors, itemExtra, rebase);
       if (!line) continue;
       record({ broken: true, gap, messageId, line, start: groupStart });
     }
@@ -2940,7 +2947,24 @@ function format(
     const key = rangeKey(gap);
     if (emitted.has(key)) continue;
     emitted.add(key);
-    if (broken === textHasBreak(gap)) continue;
+    if (broken === textHasBreak(gap)) {
+      if (join && broken && decision.line) {
+        const range = brokenRange(gap);
+        const have = text.slice(range.start, range.end);
+        const want = newline + leading(decision.line);
+        if (have !== want && !BLANK_LINE.test(have)) {
+          edits.push({
+            range: [range.start, range.end],
+            text: want,
+            loc: reportFrom(decision.start, range.end),
+            messageId: 'moved',
+          });
+        }
+      }
+
+      continue;
+    }
+
     if (broken) {
       edits.push({
         range: [gap.start, gap.end],

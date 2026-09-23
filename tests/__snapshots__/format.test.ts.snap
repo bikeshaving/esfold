@@ -688,6 +688,15 @@ exports[`join > a-chain-with-block-bodies-keeps-its-layout 1`] = `promise
 exports[`join > a-destructuring-pattern-that-fits-is-joined 1`] = `const { a, b } = obj;
 `;
 
+exports[`join > a-for-head-broken-after-its-paren-keeps-its-clauses-level 1`] = `for (
+	let ancestor = element.parentElement;
+	ancestor;
+	ancestor = ancestor.parentElement
+) {
+	visit(ancestor);
+}
+`;
+
 exports[`join > a-fully-broken-array-joins-without-spaces-inside-the-brackets 1`] = `const a = [1, 2, 3];
 `;
 
@@ -746,6 +755,15 @@ exports[`join > a-hug-whose-head-does-not-fit-breaks-every-argument 1`] = `funct
 `;
 
 exports[`join > a-hugged-arrow-joins-with-the-call-close-paren 1`] = `items.map((item) => compute(item));
+`;
+
+exports[`join > a-kept-break-takes-the-indent-join-would-give-it 1`] = `export type GeneratorMiddleware = (request: Request, context: RouteContext) =>
+	Generator<Request | undefined, Response | null | undefined | void, Response> |
+	AsyncGenerator<
+		Request | undefined,
+		Response | null | undefined | void,
+		Response
+	>;
 `;
 
 exports[`join > a-kept-break-takes-the-indent-of-its-new-place 1`] = `const value = compute(
