@@ -2642,6 +2642,12 @@ function format(
       breakGroup(group, 'inconsistentGroup');
       return;
     }
+    // A group that can never break again joins only when it fits.
+    if (breakable.length === 0) {
+      const inline = collapsedText(group);
+      if (inline === null || !joinedFits(group, inline)) return;
+    }
+
     joinGroup(group, consistent ? 'joinable' : 'inconsistentGroup');
   }
 

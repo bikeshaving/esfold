@@ -822,6 +822,11 @@ import { NotFound } from "@b9g/http-errors";
 export { InternalServerError} from "@b9g/http-errors";
 `;
 
+exports[`join > a-lone-specifier-that-does-not-fit-stays-broken 1`] = `import estimateDataURLDecodedBytes, {
+  estimateDataURLBufferAllocation,
+} from '../../lib/helpers/estimateDataURLDecodedBytes.js';
+`;
+
 exports[`join > a-prettier-ignore-comment-is-honored-the-same-way 1`] = `const shapes = {
   // prettier-ignore
   I: [
